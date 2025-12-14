@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 const base36Alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -24,5 +25,5 @@ func GenerateUserID() (string, error) {
 		n.DivMod(n, big.NewInt(36), rem)
 		s = string(base36Alphabet[int(rem.Int64())]) + s
 	}
-	return fmt.Sprintf("USR00%s", s), nil
+	return fmt.Sprintf("USR00%s", strings.ToUpper(s)), nil
 }

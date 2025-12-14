@@ -3,7 +3,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"strings"
 
 	// "errors"
 	"net/http"
@@ -32,9 +32,8 @@ type loginReq struct {
 }
 
 type tokenResp struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 func NewAuthHandler(cfg *config.Config, userSvc *service.UserService, store serviceStore) *AuthHandler {
@@ -101,35 +100,80 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "save refresh token error", nil, err.Error())
 		return
 	}
-	resp := tokenResp{AccessToken: access, RefreshToken: rt, ExpiresIn: int64(h.cfg.AccessTokenTTL.Seconds())}
+
+	host := r.Host // example: "api.myapp.com" or "localhost:8080"
+	if strings.Contains(host, ":") {
+		host = strings.Split(host, ":")[0]
+	}
+	cookieDomain := host
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    rt,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, //set true in production
+		SameSite: http.SameSiteLaxMode,
+		Domain:   cookieDomain,
+		Expires:  expires,
+	})
+
+	resp := tokenResp{AccessToken: access, ExpiresIn: int64(h.cfg.AccessTokenTTL.Seconds())}
 	utils.WriteJSONResponse(w, http.StatusOK, true, "login successful", resp, nil)
 }
 
 // Logout handler expects {"refresh_token":"..."}
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "bad request", nil, err.Error())
+	// Expect refresh token in cookie named "refresh_token"
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil || cookie.Value == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing refresh token cookie", nil, err.Error())
 		return
 	}
-	if err := h.store.RevokeRefreshToken(r.Context(), req.RefreshToken); err != nil {
+	refreshToken := cookie.Value
+
+	// Revoke refresh token in store
+	if err := h.store.RevokeRefreshToken(r.Context(), refreshToken); err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "revoke error", nil, err.Error())
 		return
 	}
+
+	// Clear refresh_token cookie (httpOnly) and also clear session cookie "sid" if present
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	utils.WriteJSONResponse(w, http.StatusOK, true, "logged out", nil, nil)
 }
 
 // Refresh handler rotates refresh tokens and returns new access + refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	// cookie, err := r.Cookie("refresh_token")
+	// if err != nil {
+	//     http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	//     return
+	// }
+
+	// // 2. Verify and Generate new Access Token
+	// newAccessToken, err := h.svc.RefreshAccessToken(cookie.Value)
+	// if err != nil {
+	//     http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	//     return
+	// }
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "bad request", nil, err.Error())
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil || cookie.Value == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing refresh token cookie", nil, err.Error())
 		return
 	}
+	req.RefreshToken = cookie.Value
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -162,11 +206,27 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4) respond with rotated refresh token and new access token
-	utils.WriteJSONResponse(w, http.StatusOK, true, "token refreshed", map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": newPlain,
-		"expires_at":    newExpiry.UTC().Format(time.RFC3339),
-	}, nil)
+	host := r.Host // example: "api.myapp.com" or "localhost:8080"
+
+	if strings.Contains(host, ":") {
+		host = strings.Split(host, ":")[0]
+	}
+
+	cookieDomain := host
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newPlain,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, //set true in production
+		SameSite: http.SameSiteLaxMode,
+		Domain:   cookieDomain,
+		Expires:  newExpiry,
+	})
+
+	resp := tokenResp{AccessToken: accessToken, ExpiresIn: int64(h.cfg.AccessTokenTTL.Seconds())}
+	utils.WriteJSONResponse(w, http.StatusOK, true, "refresh successful", resp, nil)
 }
 
 func (h *AuthHandler) GoogleSignIn(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +237,6 @@ func (h *AuthHandler) GoogleSignIn(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "bad request", nil, "missing code")
 		return
 	}
-	fmt.Println("yo myan back2back")
 
 	ctx := context.Background()
 	oauthCfg := &oauth2.Config{
@@ -246,14 +305,34 @@ func (h *AuthHandler) GoogleSignIn(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "token generation error", nil, err.Error())
 		return
 	}
+
 	rt := utils.RandomToken()
 	expires := time.Now().Add(h.cfg.RefreshTokenTTL)
+
 	if err := h.store.SaveRefreshToken(ctx, u.ID, rt, expires); err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "save refresh token error", nil, err.Error())
 		return
 	}
+	host := r.Host // example: "api.myapp.com" or "localhost:8080"
 
-	resp := tokenResp{AccessToken: access, RefreshToken: rt, ExpiresIn: int64(h.cfg.AccessTokenTTL.Seconds())}
+	if strings.Contains(host, ":") {
+		host = strings.Split(host, ":")[0]
+	}
+
+	cookieDomain := host
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    rt,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, //set true in production
+		SameSite: http.SameSiteLaxMode,
+		Domain:   cookieDomain,
+		Expires:  expires,
+	})
+
+	resp := tokenResp{AccessToken: access, ExpiresIn: int64(h.cfg.AccessTokenTTL.Seconds())}
 	utils.WriteJSONResponse(w, http.StatusOK, true, "login successful", resp, nil)
 }
 

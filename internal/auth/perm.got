@@ -1,0 +1,18 @@
+// // IsRelatedStudent checks if requester is admin OR requester==student OR requester is coach/mentor of that student
+// func (s *Store) IsRelatedStudent(ctx context.Context, requesterID, studentID string) (bool, error) {
+//     // admin quick-check
+//     u, err := s.GetUserByID(ctx, requesterID)
+//     if err != nil { return false, err }
+//     if u.Role == "admin" { return true, nil }
+//     if requesterID == studentID { return true, nil }
+
+//     // check coach_students table for coach relationship OR mentor relationship
+//     var count int64
+//     if err := s.DB.WithContext(ctx).Table("coach_students").
+//         Where("(coach_id = ? OR mentor_coach_id = ?) AND student_id = ?", requesterID, requesterID, studentID).
+//         Count(&count).Error; err != nil {
+//         return false, err
+//     }
+//     return count > 0, nil
+// }
+;

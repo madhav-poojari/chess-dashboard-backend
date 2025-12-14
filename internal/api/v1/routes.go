@@ -2,6 +2,8 @@ package v1
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware" // <--- Add this
+	"github.com/go-chi/cors"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
 	"github.com/madhava-poojari/dashboard-api/internal/config"
 	"github.com/madhava-poojari/dashboard-api/internal/service"
@@ -20,6 +22,17 @@ type API struct {
 
 func NewAPI(cfg *config.Config, s *store.Store) *API {
 	api := &API{cfg: cfg, router: chi.NewRouter(), store: s}
+	api.router.Use(middleware.Logger)
+	// Use cors.Handler (not middleware.CORS)
+	api.router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
 	api.routes()
 	return api
 }
@@ -35,6 +48,7 @@ func (a *API) routes() {
 	authH := NewAuthHandler(a.cfg, usvc, ss)
 	userH := NewUserHandler(ss)
 	adminH := NewAdminHandler(ss)
+	notesH := NewNotesHandler(ss)
 
 	r := a.router
 	// auth routes
@@ -44,6 +58,17 @@ func (a *API) routes() {
 		r.Post("/logout", authH.Logout)
 		r.Post("/refresh", authH.Refresh)
 		r.Post("/google", authH.GoogleSignIn)
+	})
+	// notes routes (protected)
+	r.Route("/notes", func(r chi.Router) {
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthMiddleware(ss.Store))
+			r.Post("/", notesH.CreateNote)
+			r.Post("/lesson-plans", notesH.CreateLessonPlan)
+			r.Get("/", notesH.GetNotesByUser)
+			r.Patch("/{id}", notesH.UpdateNote)
+			r.Delete("/{id}", notesH.DeleteNote)
+		})
 	})
 
 	r.Route("/users", func(r chi.Router) {

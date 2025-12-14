@@ -26,7 +26,7 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 	}
 	// AutoMigrate (non-destructive: creates tables/columns/indexes)
 
-	if err := db.Set("gorm:DisableForeignKeyConstraintWhenMigrating", true).AutoMigrate(&models.User{}, &models.UserDetails{}, &models.RefreshToken{}, &models.CoachStudent{}); err != nil {
+	if err := db.Set("gorm:DisableForeignKeyConstraintWhenMigrating", true).AutoMigrate(&models.User{}, &models.UserDetails{}, &models.RefreshToken{}, &models.CoachStudent{}, &models.LessonPlan{}, &models.Note{}); err != nil {
 		return nil, err
 	}
 	sqlDB, err := db.DB()
@@ -41,10 +41,7 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 	return &Store{DB: db, Cfg: cfg}, nil
 }
 
-
-
 /* ------------------ CoachStudent management ------------------ */
-
 
 /* ------------------ Refresh token methods ------------------ */
 
@@ -112,8 +109,6 @@ func (s *Store) DeleteExpiredTokens(ctx context.Context) error {
 }
 
 /* ------------------ Admin helpers ------------------ */
-
-
 
 /* ------------------ Helpers ------------------ */
 

@@ -1,7 +1,11 @@
 package models
 
-import "time"
-import "gorm.io/datatypes"
+import (
+	"time"
+
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
 
 type User struct {
 	ID    string `gorm:"primaryKey;size:10" json:"id"`
@@ -49,4 +53,36 @@ type CoachStudent struct {
 	CoachID       string `gorm:"size:10;primaryKey"`
 	StudentID     string `gorm:"size:10;primaryKey"`
 	MentorCoachID string `gorm:"size:10;index"` // added column
+}
+
+type LessonPlan struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	UserID      string         `gorm:"index;size:10" json:"user_id"`
+	Title       string         `json:"title"`
+	Description datatypes.JSON `gorm:"type:jsonb" json:"description"` // array of strings
+	StartDate   time.Time      `json:"start_date"`
+	EndDate     time.Time      `json:"end_date"`
+	Result      string         `json:"result"`
+	Active      bool           `gorm:"default:true;index" json:"active"`
+	CreatedBy   string         `gorm:"size:10" json:"created_by"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type Note struct {
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	UserID string `gorm:"index;size:10" json:"user_id"`
+	// StudentID      string         `gorm:"index;size:10" json:"student_id"`
+	Title          string         `json:"title"`
+	Description    string         `gorm:"type:text" json:"description"`
+	PrimaryTag     string         `json:"primary_tag"`
+	Tags           datatypes.JSON `gorm:"type:jsonb" json:"tags"` // JSON array
+	IsStarred      bool           `gorm:"default:false" json:"is_starred"`
+	AdditionalInfo datatypes.JSON `gorm:"type:jsonb" json:"additional_info"`
+	Visibility     int            `gorm:"not null" json:"visibility"`
+	CreatedBy      string         `gorm:"size:10" json:"created_by"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
