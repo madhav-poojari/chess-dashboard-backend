@@ -27,7 +27,9 @@ func NewAPI(cfg *config.Config, s *store.Store) *API {
 	api.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{
 			"http://localhost:5173",
+			"http://stage.api.brschess.com",
 			"https://stage.api.brschess.com",
+			"http://api.brschess.com",
 			"https://api.brschess.com",
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
