@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware" // <--- Add this
-	"github.com/go-chi/cors"
+	// "github.com/go-chi/cors"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
 	"github.com/madhava-poojari/dashboard-api/internal/config"
 	"github.com/madhava-poojari/dashboard-api/internal/service"
@@ -26,20 +26,20 @@ func NewAPI(cfg *config.Config, s *store.Store) *API {
 	api := &API{cfg: cfg, router: chi.NewRouter(), store: s}
 	api.router.Use(middleware.Logger)
 	// Use cors.Handler (not middleware.CORS)
-	api.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{
-			"http://localhost:5173",
-			"http://stage-dashboard.brschess.com",
-			"https://stage-dashboard.brschess.com",
-			"http://dashboard.brschess.com",
-			"https://dashboard.brschess.com",
-		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
+	// api.router.Use(cors.Handler(cors.Options{
+		// AllowedOrigins: []string{
+		// 	"http://localhost:5173",
+		// 	"http://stage-dashboard.brschess.com",
+		// 	"https://stage-dashboard.brschess.com",
+		// 	"http://dashboard.brschess.com",
+		// 	"https://dashboard.brschess.com",
+		// },
+		// AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		// AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		// ExposedHeaders:   []string{"Link"},
+		// AllowCredentials: true,
+		// MaxAge:           300,
+	// }))
 
 	api.routes()
 	return api
