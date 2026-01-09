@@ -92,8 +92,37 @@ func (a *API) routes() {
 
 	r.Route("/admin", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
-		// r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin")).Get("/dashboard", adminH.AdminDashboard)
-		r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin")).Put("/user/{id}", adminH.UpdateUserStatus)
+		
+		// All admin routes require authentication and admin role
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthMiddleware(a.store))
+			r.Use(auth.RoleMiddleware("admin"))
+			
+			// Dashboard data - get all data in one call
+			r.Get("/dashboard", adminH.GetAdminDashboard)
+			
+			// Pending approvals
+			r.Get("/pending-approvals", adminH.GetPendingApprovals)
+			r.Post("/users/{id}/approve", adminH.ApproveUser)
+			
+			// User management
+			r.Put("/user/{id}", adminH.UpdateUserStatus)
+			r.Get("/users", adminH.ListAllUsers)
+			
+			// Students
+			r.Get("/students", adminH.GetStudentsWithAssignments)
+			r.Post("/students/assign", adminH.AssignStudentToCoach)
+			r.Delete("/students/{id}/unassign", adminH.UnassignStudent)
+			
+			// Coaches
+			r.Get("/coaches", adminH.GetCoachesWithAssignments)
+			r.Get("/coaches/all", adminH.GetAllCoaches)
+			r.Post("/coaches/assign", adminH.AssignCoachToMentor)
+			r.Delete("/coaches/{id}/unassign", adminH.UnassignCoachFromMentor)
+			
+			// Mentor coaches
+			r.Get("/mentors", adminH.GetMentorCoaches)
+		})
 	})
 
 	r.Route("/health", func(r chi.Router) {
