@@ -1,0 +1,18 @@
+version: "3.8"
+services:
+  api:
+    build: .
+    image: dashboard-api:latest
+    container_name: dashboard-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS}
+      BIND_ADDR: :8080
