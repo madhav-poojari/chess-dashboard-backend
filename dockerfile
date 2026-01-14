@@ -1,5 +1,5 @@
 # build stage
-FROM golang:1.22-alpine AS build
+FROM golang:1.24-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -13,4 +13,5 @@ RUN apk add --no-cache ca-certificates
 COPY --from=build /server /server
 EXPOSE 8080
 ENTRYPOINT ["/server"]
+
 
