@@ -185,3 +185,73 @@ func (h *AdminHandler) AssignCoachAsMentor(w http.ResponseWriter, r *http.Reques
 
 	utils.WriteJSONResponse(w, http.StatusOK, true, "coach assigned as mentor", nil, nil)
 }
+
+// GetMentorCoaches returns all mentor coaches (coaches with role "mentor")
+func (h *AdminHandler) GetMentorCoaches(w http.ResponseWriter, r *http.Request) {
+	coaches, err := h.store.ListCoachesWithAssignments(r.Context())
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch mentor coaches", nil, err)
+		return
+	}
+	// Filter to only mentor coaches
+	mentors := make([]interface{}, 0)
+	for _, coach := range coaches {
+		if coach.Role == "mentor" {
+			mentors = append(mentors, coach)
+		}
+	}
+	utils.WriteJSONResponse(w, http.StatusOK, true, "mentor coaches fetched", mentors, nil)
+}
+
+// GetAllCoaches returns all coaches (for assignment dropdown)
+func (h *AdminHandler) GetAllCoaches(w http.ResponseWriter, r *http.Request) {
+	coaches, err := h.store.ListCoachesWithAssignments(r.Context())
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coaches", nil, err)
+		return
+	}
+	utils.WriteJSONResponse(w, http.StatusOK, true, "coaches fetched", coaches, nil)
+}
+
+// GetAdminDashboard returns all data needed for the admin dashboard in one call
+func (h *AdminHandler) GetAdminDashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get pending approvals
+	pendingUsers, err := h.store.ListUnapprovedUsers(ctx)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch pending approvals", nil, err)
+		return
+	}
+
+	// Get students with assignments
+	students, err := h.store.ListStudentsWithAssignments(ctx)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch students", nil, err)
+		return
+	}
+
+	// Get coaches with assignments
+	coaches, err := h.store.ListCoachesWithAssignments(ctx)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coaches", nil, err)
+		return
+	}
+
+	// Filter mentor coaches
+	mentors := make([]interface{}, 0)
+	for _, coach := range coaches {
+		if coach.Role == "mentor" {
+			mentors = append(mentors, coach)
+		}
+	}
+
+	data := map[string]interface{}{
+		"pending_approvals": pendingUsers,
+		"students":          students,
+		"coaches":           coaches,
+		"mentor_coaches":    mentors,
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "admin dashboard data fetched", data, nil)
+}

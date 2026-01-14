@@ -211,3 +211,61 @@ func (s *Store) ListCoachesWithAssignments(ctx context.Context) ([]*CoachWithAss
 
 	return result, nil
 }
+
+// GetPendingApprovals is an alias for ListUnapprovedUsers (for backward compatibility)
+func (s *Store) GetPendingApprovals(ctx context.Context) ([]*models.User, error) {
+	return s.ListUnapprovedUsers(ctx)
+}
+
+// GetUsersByRole fetches users filtered by a specific role
+func (s *Store) GetUsersByRole(ctx context.Context, role models.Role) ([]*models.User, error) {
+	var users []*models.User
+	if err := s.DB.WithContext(ctx).
+		Preload("UserDetails").
+		Where("role = ?", role).
+		Order("created_at DESC").
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// GetAllStudents fetches all users with role student
+func (s *Store) GetAllStudents(ctx context.Context) ([]*models.User, error) {
+	return s.GetUsersByRole(ctx, models.RoleStudent)
+}
+
+// GetAllCoaches fetches users with role coach
+func (s *Store) GetAllCoaches(ctx context.Context) ([]*models.User, error) {
+	return s.GetUsersByRole(ctx, models.RoleCoach)
+}
+
+// GetAllMentorCoaches fetches users with role mentor
+func (s *Store) GetAllMentorCoaches(ctx context.Context) ([]*models.User, error) {
+	return s.GetUsersByRole(ctx, models.RoleMentor)
+}
+
+// GetAllUsersGrouped returns all users grouped by role for admin view
+func (s *Store) GetAllUsersGrouped(ctx context.Context) (map[string][]*models.User, error) {
+	result := make(map[string][]*models.User)
+
+	students, err := s.GetAllStudents(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result["students"] = students
+
+	coaches, err := s.GetAllCoaches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result["coaches"] = coaches
+
+	mentors, err := s.GetAllMentorCoaches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result["mentors"] = mentors
+
+	return result, nil
+}
