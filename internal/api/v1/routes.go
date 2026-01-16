@@ -85,10 +85,12 @@ func (a *API) routes() {
 
 	r.Route("/users", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
-		r.With(auth.AuthMiddleware(a.store)).Get("/", userH.ListUsers)
-		r.With(auth.AuthMiddleware(a.store)).Get("/me", userH.GetSelfProfile)
-		r.With(auth.AuthMiddleware(a.store)).Get("/{id}", userH.GetUser)
-		r.With(auth.AuthMiddleware(a.store)).Put("/{id}", userH.UpdateUser)
+		authMiddleware := auth.AuthMiddleware(a.store)
+		r.With(authMiddleware).Get("/", userH.ListUsers)
+		r.With(authMiddleware).Get("/me", userH.GetSelfProfile)
+		r.With(authMiddleware).Post("/reset-password", userH.ResetOwnPassword)
+		r.With(authMiddleware).Get("/{id}", userH.GetUser)
+		r.With(authMiddleware).Put("/{id}", userH.UpdateUser)
 	})
 
 	r.Route("/admin", func(r chi.Router) {
@@ -114,6 +116,9 @@ func (a *API) routes() {
 		adminGroup.Get("/coaches", adminH.GetCoachesWithAssignments)
 		adminGroup.Get("/coaches/all", adminH.GetAllCoaches)
 		adminGroup.Post("/assign-mentor", adminH.AssignCoachAsMentor)
+		adminGroup.Put("/update-student-assignment", adminH.UpdateStudentAssignment)
+		adminGroup.Put("/update-coach-mentor", adminH.UpdateCoachMentorAssignment)
+		adminGroup.Post("/reset-password", adminH.ResetUserPassword)
 
 		// Mentor coaches
 		adminGroup.Get("/mentors", adminH.GetMentorCoaches)

@@ -338,3 +338,215 @@ func (h *AdminHandler) GetAdminDashboard(w http.ResponseWriter, r *http.Request)
 
 	utils.WriteJSONResponse(w, http.StatusOK, true, "admin dashboard data fetched", data, nil)
 }
+
+// UpdateStudentAssignment updates a student's coach assignment
+func (h *AdminHandler) UpdateStudentAssignment(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		StudentID string `json:"student_id"`
+		CoachID   string `json:"coach_id"` // Empty string to remove assignment
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "invalid request", nil, err)
+		return
+	}
+
+	if payload.StudentID == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "student_id is required", nil, nil)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Find existing assignment
+	var existing models.CoachStudent
+	err := h.store.Store.DB.WithContext(ctx).Where("student_id = ?", payload.StudentID).First(&existing).Error
+
+	if payload.CoachID == "" {
+		// Remove assignment
+		if err == nil {
+			err = h.store.RemoveCoachStudent(ctx, existing.CoachID, payload.StudentID)
+			if err != nil {
+				utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error removing assignment", nil, err)
+				return
+			}
+		}
+		utils.WriteJSONResponse(w, http.StatusOK, true, "assignment removed", nil, nil)
+		return
+	}
+
+	// Update or create assignment
+	if err == nil {
+		// Update existing assignment
+		// Check if coach has a default mentor
+		var defaultMentor string
+		var mentorCheck models.CoachStudent
+		if err := h.store.Store.DB.WithContext(ctx).
+			Where("coach_id = ? AND mentor_coach_id != '' AND mentor_coach_id IS NOT NULL", payload.CoachID).
+			First(&mentorCheck).Error; err == nil {
+			defaultMentor = mentorCheck.MentorCoachID
+		}
+
+		updateData := map[string]interface{}{
+			"coach_id":        payload.CoachID,
+			"mentor_coach_id": defaultMentor,
+		}
+		err = h.store.Store.DB.WithContext(ctx).Model(&models.CoachStudent{}).
+			Where("student_id = ?", payload.StudentID).
+			Updates(updateData).Error
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating assignment", nil, err)
+			return
+		}
+	} else {
+		// Create new assignment
+		var defaultMentor string
+		var mentorCheck models.CoachStudent
+		if err := h.store.Store.DB.WithContext(ctx).
+			Where("coach_id = ? AND mentor_coach_id != '' AND mentor_coach_id IS NOT NULL", payload.CoachID).
+			First(&mentorCheck).Error; err == nil {
+			defaultMentor = mentorCheck.MentorCoachID
+		}
+
+		err = h.store.AddCoachStudent(ctx, payload.CoachID, payload.StudentID, defaultMentor)
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error creating assignment", nil, err)
+			return
+		}
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "assignment updated", nil, nil)
+}
+
+// UpdateCoachMentorAssignment updates a coach's mentor assignment
+func (h *AdminHandler) UpdateCoachMentorAssignment(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		CoachID       string `json:"coach_id"`
+		MentorCoachID string `json:"mentor_coach_id"` // Empty string to remove assignment
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "invalid request", nil, err)
+		return
+	}
+
+	if payload.CoachID == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "coach_id is required", nil, nil)
+		return
+	}
+
+	ctx := r.Context()
+
+	if payload.MentorCoachID == "" {
+		// Remove mentor assignment from all students of this coach
+		updateData := map[string]interface{}{"mentor_coach_id": ""}
+		err := h.store.Store.DB.WithContext(ctx).Model(&models.CoachStudent{}).
+			Where("coach_id = ?", payload.CoachID).
+			Updates(updateData).Error
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error removing mentor assignment", nil, err)
+			return
+		}
+
+		// Also remove from tracking entries
+		coachIDLen := len(payload.CoachID)
+		var trackingStudentID string
+		if coachIDLen <= 8 {
+			trackingStudentID = "T-" + payload.CoachID
+		} else {
+			trackingStudentID = "T-" + payload.CoachID[coachIDLen-8:]
+		}
+		h.store.Store.DB.WithContext(ctx).
+			Where("coach_id = ? AND student_id = ?", payload.CoachID, trackingStudentID).
+			Delete(&models.CoachStudent{})
+
+		utils.WriteJSONResponse(w, http.StatusOK, true, "mentor assignment removed", nil, nil)
+		return
+	}
+
+	// Update mentor for all students of this coach
+	updateData := map[string]interface{}{"mentor_coach_id": payload.MentorCoachID}
+	result := h.store.Store.DB.WithContext(ctx).Model(&models.CoachStudent{}).
+		Where("coach_id = ?", payload.CoachID).
+		Updates(updateData)
+
+	if result.Error != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating mentor assignment", nil, result.Error)
+		return
+	}
+
+	// If coach has no existing students, create a tracking entry
+	if result.RowsAffected == 0 {
+		coachIDLen := len(payload.CoachID)
+		var trackingStudentID string
+		if coachIDLen <= 8 {
+			trackingStudentID = "T-" + payload.CoachID
+		} else {
+			trackingStudentID = "T-" + payload.CoachID[coachIDLen-8:]
+		}
+
+		var existingTracking models.CoachStudent
+		if err := h.store.Store.DB.WithContext(ctx).
+			Where("coach_id = ? AND student_id = ?", payload.CoachID, trackingStudentID).
+			First(&existingTracking).Error; err != nil {
+			// Create new tracking entry
+			err = h.store.AddCoachStudent(ctx, payload.CoachID, trackingStudentID, payload.MentorCoachID)
+			if err != nil {
+				utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error creating mentor tracking entry", nil, err)
+				return
+			}
+		} else {
+			// Update existing tracking entry
+			err = h.store.Store.DB.WithContext(ctx).Model(&models.CoachStudent{}).
+				Where("coach_id = ? AND student_id = ?", payload.CoachID, trackingStudentID).
+				Updates(updateData).Error
+			if err != nil {
+				utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating mentor tracking entry", nil, err)
+				return
+			}
+		}
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "mentor assignment updated", nil, nil)
+}
+
+// ResetUserPassword resets a user's password (admin only)
+func (h *AdminHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		UserID   string `json:"user_id"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "invalid request", nil, err)
+		return
+	}
+
+	if payload.UserID == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "user_id is required", nil, nil)
+		return
+	}
+
+	if payload.Password == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "password is required", nil, nil)
+		return
+	}
+
+	// Hash the new password
+	hash, err := utils.HashPassword(payload.Password)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error hashing password", nil, err)
+		return
+	}
+
+	// Update user's password
+	err = h.store.UpdateUserFields(r.Context(), payload.UserID, map[string]interface{}{
+		"password_hash": hash,
+	})
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating password", nil, err)
+		return
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "password reset successfully", nil, nil)
+}
