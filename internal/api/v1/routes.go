@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware" // <--- Add this
+
 	// "github.com/go-chi/cors"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
 	"github.com/madhava-poojari/dashboard-api/internal/config"
@@ -27,18 +28,18 @@ func NewAPI(cfg *config.Config, s *store.Store) *API {
 	api.router.Use(middleware.Logger)
 	// Use cors.Handler (not middleware.CORS)
 	// api.router.Use(cors.Handler(cors.Options{
-		// AllowedOrigins: []string{
-		// 	"http://localhost:5173",
-		// 	"http://stage-dashboard.brschess.com",
-		// 	"https://stage-dashboard.brschess.com",
-		// 	"http://dashboard.brschess.com",
-		// 	"https://dashboard.brschess.com",
-		// },
-		// AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		// AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		// ExposedHeaders:   []string{"Link"},
-		// AllowCredentials: true,
-		// MaxAge:           300,
+	// AllowedOrigins: []string{
+	// 	"http://localhost:5173",
+	// 	"http://stage-dashboard.brschess.com",
+	// 	"https://stage-dashboard.brschess.com",
+	// 	"http://dashboard.brschess.com",
+	// 	"https://dashboard.brschess.com",
+	// },
+	// AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	// AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+	// ExposedHeaders:   []string{"Link"},
+	// AllowCredentials: true,
+	// MaxAge:           300,
 	// }))
 
 	api.routes()
@@ -83,17 +84,44 @@ func (a *API) routes() {
 	})
 
 	r.Route("/users", func(r chi.Router) {
-		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {}) 
-		r.With(auth.AuthMiddleware(a.store)).Get("/", userH.ListUsers)
-		r.With(auth.AuthMiddleware(a.store)).Get("/me", userH.GetSelfProfile)
-		r.With(auth.AuthMiddleware(a.store)).Get("/{id}", userH.GetUser)
-		r.With(auth.AuthMiddleware(a.store)).Put("/{id}", userH.UpdateUser)
+		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
+		authMiddleware := auth.AuthMiddleware(a.store)
+		r.With(authMiddleware).Get("/", userH.ListUsers)
+		r.With(authMiddleware).Get("/me", userH.GetSelfProfile)
+		r.With(authMiddleware).Post("/reset-password", userH.ResetOwnPassword)
+		r.With(authMiddleware).Get("/{id}", userH.GetUser)
+		r.With(authMiddleware).Put("/{id}", userH.UpdateUser)
 	})
 
 	r.Route("/admin", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
-		// r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin")).Get("/dashboard", adminH.AdminDashboard)
-		r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin")).Put("/user/{id}", adminH.UpdateUserStatus)
+		adminGroup := r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin"))
+
+		// Dashboard - get all data in one call
+		adminGroup.Get("/dashboard", adminH.GetAdminDashboard)
+
+		// User management
+		adminGroup.Put("/user/{id}", adminH.UpdateUserStatus)
+		adminGroup.Post("/user/{id}/approve", adminH.ApproveUser)
+
+		// Pending approvals
+		adminGroup.Get("/unapproved-users", adminH.GetUnapprovedUsers)
+
+		// Students
+		adminGroup.Get("/students", adminH.GetStudentsWithAssignments)
+		adminGroup.Post("/assign-student", adminH.AssignStudentToCoach)
+		adminGroup.Post("/students/assign", adminH.AssignStudentToCoach) // Alternative route
+
+		// Coaches
+		adminGroup.Get("/coaches", adminH.GetCoachesWithAssignments)
+		adminGroup.Get("/coaches/all", adminH.GetAllCoaches)
+		adminGroup.Post("/assign-mentor", adminH.AssignCoachAsMentor)
+		adminGroup.Put("/update-student-assignment", adminH.UpdateStudentAssignment)
+		adminGroup.Put("/update-coach-mentor", adminH.UpdateCoachMentorAssignment)
+		adminGroup.Post("/reset-password", adminH.ResetUserPassword)
+
+		// Mentor coaches
+		adminGroup.Get("/mentors", adminH.GetMentorCoaches)
 	})
 
 	r.Route("/health", func(r chi.Router) {
