@@ -97,31 +97,18 @@ func (a *API) routes() {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		adminGroup := r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin"))
 
-		// Dashboard - get all data in one call
-		adminGroup.Get("/dashboard", adminH.GetAdminDashboard)
-
 		// User management
 		adminGroup.Put("/user/{id}", adminH.UpdateUserStatus)
-		adminGroup.Post("/user/{id}/approve", adminH.ApproveUser)
 
 		// Pending approvals
 		adminGroup.Get("/unapproved-users", adminH.GetUnapprovedUsers)
 
-		// Students
+		// Students & coaches (assignment views)
 		adminGroup.Get("/students", adminH.GetStudentsWithAssignments)
-		adminGroup.Post("/assign-student", adminH.AssignStudentToCoach)
-		adminGroup.Post("/students/assign", adminH.AssignStudentToCoach) // Alternative route
-
-		// Coaches
 		adminGroup.Get("/coaches", adminH.GetCoachesWithAssignments)
-		adminGroup.Get("/coaches/all", adminH.GetAllCoaches)
-		adminGroup.Post("/assign-mentor", adminH.AssignCoachAsMentor)
-		adminGroup.Put("/update-student-assignment", adminH.UpdateStudentAssignment)
-		adminGroup.Put("/update-coach-mentor", adminH.UpdateCoachMentorAssignment)
-		adminGroup.Post("/reset-password", adminH.ResetUserPassword)
 
-		// Mentor coaches
-		adminGroup.Get("/mentors", adminH.GetMentorCoaches)
+		// Unified assignment update endpoint (student<->coach, coach<->mentor)
+		adminGroup.Put("/assignments", adminH.UpdateAssignments)
 	})
 
 	r.Route("/health", func(r chi.Router) {

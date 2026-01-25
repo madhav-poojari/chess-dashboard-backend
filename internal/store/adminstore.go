@@ -314,3 +314,152 @@ func (s *Store) GetAllUsersGrouped(ctx context.Context) (map[string][]*models.Us
 
 	return result, nil
 }
+
+func trackingStudentIDForCoach(coachID string) string {
+	// Format: "T-" + last 8 chars of coach_id (max 10 chars total)
+	coachIDLen := len(coachID)
+	if coachIDLen <= 8 {
+		return "T-" + coachID
+	}
+	return "T-" + coachID[coachIDLen-8:]
+}
+
+func getDefaultMentorForCoachTx(tx *gorm.DB, coachID string) (string, error) {
+	var cs models.CoachStudent
+	err := tx.
+		Where("coach_id = ? AND mentor_coach_id != '' AND mentor_coach_id IS NOT NULL", coachID).
+		First(&cs).Error
+	if err == nil {
+		return cs.MentorCoachID, nil
+	}
+	if err == gorm.ErrRecordNotFound {
+		return "", nil
+	}
+	return "", err
+}
+
+// SetStudentCoachAssignment assigns/moves/unassigns a student from a coach.
+// If coachID == "", the assignment (if any) is removed.
+// If coachID != "", the assignment is created or moved to the given coach.
+//
+// This also applies the coach's default mentor (if any) to the student's assignment
+// and cleans up mentor tracking rows for the coach once a real student exists.
+func (s *Store) SetStudentCoachAssignment(ctx context.Context, studentID, coachID string) error {
+	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing models.CoachStudent
+		err := tx.Where("student_id = ?", studentID).First(&existing).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+
+		// Remove assignment
+		if coachID == "" {
+			if err == nil {
+				return tx.Where("coach_id = ? AND student_id = ?", existing.CoachID, studentID).
+					Delete(&models.CoachStudent{}).Error
+			}
+			return nil
+		}
+
+		defaultMentor, err := getDefaultMentorForCoachTx(tx, coachID)
+		if err != nil {
+			return err
+		}
+
+		// If already assigned to this coach, just ensure mentor follows default mentor (if any).
+		if err == nil && existing.CoachID == coachID {
+			return tx.Model(&models.CoachStudent{}).
+				Where("coach_id = ? AND student_id = ?", coachID, studentID).
+				Update("mentor_coach_id", defaultMentor).Error
+		}
+
+		// Move: delete old assignment if it exists
+		if err == nil {
+			if err := tx.Where("coach_id = ? AND student_id = ?", existing.CoachID, studentID).
+				Delete(&models.CoachStudent{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// Create or update the (coach_id, student_id) row
+		var target models.CoachStudent
+		targetErr := tx.Where("coach_id = ? AND student_id = ?", coachID, studentID).First(&target).Error
+		if targetErr == nil {
+			if err := tx.Model(&models.CoachStudent{}).
+				Where("coach_id = ? AND student_id = ?", coachID, studentID).
+				Update("mentor_coach_id", defaultMentor).Error; err != nil {
+				return err
+			}
+		} else if targetErr == gorm.ErrRecordNotFound {
+			if err := tx.Create(&models.CoachStudent{
+				CoachID:       coachID,
+				StudentID:     studentID,
+				MentorCoachID: defaultMentor,
+			}).Error; err != nil {
+				return err
+			}
+		} else {
+			return targetErr
+		}
+
+		// If there is a mentor tracking row for this coach, it's no longer needed once we have real students.
+		trackingStudentID := trackingStudentIDForCoach(coachID)
+		return tx.Where("coach_id = ? AND student_id = ?", coachID, trackingStudentID).
+			Delete(&models.CoachStudent{}).Error
+	})
+}
+
+// SetCoachMentorAssignment assigns/removes a mentor coach for a coach.
+// If mentorCoachID == "", the mentor assignment is removed.
+//
+// If a coach has no real student rows yet, a tracking row (student_id="T-...") is used
+// to remember the mentor assignment for future student assignments.
+func (s *Store) SetCoachMentorAssignment(ctx context.Context, coachID, mentorCoachID string) error {
+	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Apply mentor to all rows for this coach (includes tracking rows if present).
+		if err := tx.Model(&models.CoachStudent{}).
+			Where("coach_id = ?", coachID).
+			Update("mentor_coach_id", mentorCoachID).Error; err != nil {
+			return err
+		}
+
+		trackingStudentID := trackingStudentIDForCoach(coachID)
+
+		// Removing mentor: also remove tracking entry.
+		if mentorCoachID == "" {
+			return tx.Where("coach_id = ? AND student_id = ?", coachID, trackingStudentID).
+				Delete(&models.CoachStudent{}).Error
+		}
+
+		// Determine if coach has any real students (exclude tracking rows).
+		var realCount int64
+		if err := tx.Model(&models.CoachStudent{}).
+			Where("coach_id = ? AND student_id NOT LIKE 'T-%'", coachID).
+			Count(&realCount).Error; err != nil {
+			return err
+		}
+
+		// If there are real students, tracking row is not needed; clean it up if it exists.
+		if realCount > 0 {
+			return tx.Where("coach_id = ? AND student_id = ?", coachID, trackingStudentID).
+				Delete(&models.CoachStudent{}).Error
+		}
+
+		// No real students: upsert tracking row to persist mentor assignment.
+		var existing models.CoachStudent
+		err := tx.Where("coach_id = ? AND student_id = ?", coachID, trackingStudentID).First(&existing).Error
+		if err == nil {
+			return tx.Model(&models.CoachStudent{}).
+				Where("coach_id = ? AND student_id = ?", coachID, trackingStudentID).
+				Update("mentor_coach_id", mentorCoachID).Error
+		}
+		if err == gorm.ErrRecordNotFound {
+			return tx.Create(&models.CoachStudent{
+				CoachID:       coachID,
+				StudentID:     trackingStudentID,
+				MentorCoachID: mentorCoachID,
+			}).Error
+		}
+		return err
+	})
+}
