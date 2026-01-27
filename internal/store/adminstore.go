@@ -348,13 +348,14 @@ func (s *Store) SetStudentCoachAssignment(ctx context.Context, studentID, coachI
 	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing models.CoachStudent
 		err := tx.Where("student_id = ?", studentID).First(&existing).Error
+		foundExisting := (err == nil)
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return err
 		}
 
 		// Remove assignment
 		if coachID == "" {
-			if err == nil {
+			if foundExisting {
 				return tx.Where("coach_id = ? AND student_id = ?", existing.CoachID, studentID).
 					Delete(&models.CoachStudent{}).Error
 			}
@@ -367,14 +368,14 @@ func (s *Store) SetStudentCoachAssignment(ctx context.Context, studentID, coachI
 		}
 
 		// If already assigned to this coach, just ensure mentor follows default mentor (if any).
-		if err == nil && existing.CoachID == coachID {
+		if foundExisting && existing.CoachID == coachID {
 			return tx.Model(&models.CoachStudent{}).
 				Where("coach_id = ? AND student_id = ?", coachID, studentID).
 				Update("mentor_coach_id", defaultMentor).Error
 		}
 
 		// Move: delete old assignment if it exists
-		if err == nil {
+		if foundExisting {
 			if err := tx.Where("coach_id = ? AND student_id = ?", existing.CoachID, studentID).
 				Delete(&models.CoachStudent{}).Error; err != nil {
 				return err

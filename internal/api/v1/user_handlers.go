@@ -34,8 +34,8 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coachId, mentorId, err := h.store.GetCoachesByStudentID(ctx, current.ID)
-	// authorization: owner or (admin|coach|mentor)
+	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to view their student.
+	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
 	if !CanAccessStudentData(current, id, coachId, mentorId) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
@@ -105,15 +105,15 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coachId, mentorId, err := h.store.GetCoachesByStudentID(ctx, current.ID)
-	// authorization: owner or (admin|coach|mentor)
+	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to update their student.
+	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
 	if !CanAccessStudentData(current, id, coachId, mentorId) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
 	// ensure target exists
-	_, err = h.store.GetUserByID(ctx, id)
+	_, err := h.store.GetUserByID(ctx, id)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "user not found", nil, err.Error())
 		return
