@@ -31,9 +31,9 @@ type UserDetails struct {
 	Phone             string            `json:"phone"`
 	DOB               *time.Time        `json:"dob"`
 	LichessUsername   string            `json:"lichess_username"`
-	USCFID            string            `json:"uscf_id"`
+	USCFID            string            `gorm:"column:uscf_id" json:"uscf_id"`
 	ChesscomUsername  string            `json:"chesscom_username"`
-	FIDEID            string            `json:"fide_id"`
+	FIDEID            string            `gorm:"column:fide_id" json:"fide_id"`
 	Bio               string            `json:"bio"`
 	ProfilePictureURL string            `json:"profile_picture_url"`
 	AdditionalInfo    datatypes.JSONMap `gorm:"type:jsonb" json:"additional_info"`
