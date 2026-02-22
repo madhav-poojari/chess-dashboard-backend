@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
@@ -15,14 +16,14 @@ import (
 
 type ImageHandler struct {
 	store   serviceStore
-	storage *utils.FileStorage
+	storage *utils.R2Storage
 	cfg     *config.Config
 }
 
 func NewImageHandler(store serviceStore, cfg *config.Config) *ImageHandler {
 	return &ImageHandler{
 		store:   store,
-		storage: utils.NewFileStorage(cfg.UploadDir),
+		storage: utils.NewR2Storage(cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Endpoint, cfg.R2BucketName),
 		cfg:     cfg,
 	}
 }
@@ -81,7 +82,7 @@ func (h *ImageHandler) UploadProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fullURL := fmt.Sprintf("%s/uploads/%s", h.cfg.UploadBaseURL, urlSuffix)
+	fullURL, _ := h.storage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "profile picture uploaded", map[string]string{
 		"url_suffix": urlSuffix,
 		"url":        fullURL,
@@ -147,16 +148,17 @@ func (h *ImageHandler) ListGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build full URLs
+	// Build presigned URLs
 	type imageResp struct {
 		models.Image
 		URL string `json:"url"`
 	}
 	resp := make([]imageResp, len(images))
 	for i, img := range images {
+		presignedURL, _ := h.storage.PresignGetObject(img.URLSuffix, 1*time.Hour)
 		resp[i] = imageResp{
 			Image: img,
-			URL:   fmt.Sprintf("%s/uploads/%s", h.cfg.UploadBaseURL, img.URLSuffix),
+			URL:   presignedURL,
 		}
 	}
 
@@ -222,7 +224,7 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	fullURL := fmt.Sprintf("%s/uploads/%s", h.cfg.UploadBaseURL, urlSuffix)
+	fullURL, _ := h.storage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusCreated, true, "gallery image uploaded", map[string]interface{}{
 		"id":         img.ID,
 		"url_suffix": urlSuffix,
@@ -265,7 +267,7 @@ func (h *ImageHandler) DeleteGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Delete file from disk
+	// Delete file from R2
 	_ = h.storage.DeleteFile(img.URLSuffix)
 
 	// Delete DB record
@@ -348,4 +350,31 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 	}
 
 	utils.WriteJSONResponse(w, http.StatusOK, true, "image metadata updated", nil, nil)
+}
+
+// GET /images/presign?key=...
+// Returns a presigned URL for the given R2 object key.
+func (h *ImageHandler) PresignURL(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	current := auth.GetUserFromCtx(ctx)
+	if current == nil {
+		utils.WriteJSONResponse(w, http.StatusUnauthorized, false, "unauthorized", nil, nil)
+		return
+	}
+
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing key param", nil, nil)
+		return
+	}
+
+	presignedURL, err := h.storage.PresignGetObject(key, 1*time.Hour)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to generate URL", nil, err.Error())
+		return
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", map[string]string{
+		"url": presignedURL,
+	}, nil)
 }

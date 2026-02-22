@@ -20,6 +20,10 @@ type Config struct {
 	GoogleRedirectURL  string
 	UploadDir          string
 	UploadBaseURL      string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	R2Endpoint         string
+	R2BucketName       string
 }
 
 func Load() (*Config, error) {
@@ -53,6 +57,10 @@ func Load() (*Config, error) {
 		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
 		UploadDir:          getEnv("UPLOAD_DIR", "./uploads"),
 		UploadBaseURL:      getEnv("UPLOAD_BASE_URL", "http://localhost:8080"),
+		R2AccessKeyID:      os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretAccessKey:  os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2Endpoint:         os.Getenv("R2_ENDPOINT"),
+		R2BucketName:       os.Getenv("R2_BUCKET_NAME"),
 	}, nil
 }
 
