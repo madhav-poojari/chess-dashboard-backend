@@ -18,6 +18,8 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
+	UploadDir          string
+	UploadBaseURL      string
 }
 
 func Load() (*Config, error) {
@@ -49,6 +51,8 @@ func Load() (*Config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+		UploadDir:          getEnv("UPLOAD_DIR", "./uploads"),
+		UploadBaseURL:      getEnv("UPLOAD_BASE_URL", "http://localhost:8080"),
 	}, nil
 }
 
