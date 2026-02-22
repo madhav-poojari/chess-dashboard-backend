@@ -41,10 +41,6 @@ func (s *Server) NewHTTPServer() *http.Server {
 	api := v1.NewAPI(s.cfg, s.db)
 	r.Mount("/api/v1", api.Routes())
 
-	// Serve uploaded files at /uploads/* (outside /api/v1 prefix)
-	fileServer := http.FileServer(http.Dir(s.cfg.UploadDir))
-	r.Handle("/uploads/*", http.StripPrefix("/uploads", fileServer))
-
 	srv := &http.Server{
 		Addr:         s.cfg.BindAddr,
 		Handler:      r,

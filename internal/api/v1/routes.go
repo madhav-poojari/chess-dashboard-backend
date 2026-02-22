@@ -119,6 +119,12 @@ func (a *API) routes() {
 		r.With(authMiddleware).Patch("/{id}/gallery/{imageId}", imgH.UpdateGalleryImageMetadata)
 	})
 
+	// Image presign (general purpose)
+	r.Route("/images", func(r chi.Router) {
+		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
+		r.With(auth.AuthMiddleware(a.store)).Get("/presign", imgH.PresignURL)
+	})
+
 	r.Route("/admin", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		adminGroup := r.With(auth.AuthMiddleware(a.store)).With(auth.RoleMiddleware("admin"))
