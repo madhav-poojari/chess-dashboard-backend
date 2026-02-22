@@ -34,6 +34,7 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 		&models.LessonPlan{},
 		&models.Note{},
 		&models.Attendance{},
+		&models.Image{},
 	); err != nil {
 		return nil, err
 	}

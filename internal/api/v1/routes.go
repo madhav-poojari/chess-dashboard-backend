@@ -59,6 +59,7 @@ func (a *API) routes() {
 	adminH := NewAdminHandler(ss)
 	notesH := NewNotesHandler(ss)
 	attH := NewAttendanceHandler(ss)
+	imgH := NewImageHandler(ss, a.cfg)
 
 	r := a.router
 	// auth routes
@@ -106,6 +107,16 @@ func (a *API) routes() {
 		r.With(authMiddleware).Post("/reset-password", userH.ResetOwnPassword)
 		r.With(authMiddleware).Get("/{id}", userH.GetUser)
 		r.With(authMiddleware).Put("/{id}", userH.UpdateUser)
+
+		// Profile picture
+		r.With(authMiddleware).Post("/{id}/profile-picture", imgH.UploadProfilePicture)
+		r.With(authMiddleware).Delete("/{id}/profile-picture", imgH.DeleteProfilePicture)
+
+		// Gallery
+		r.With(authMiddleware).Get("/{id}/gallery", imgH.ListGallery)
+		r.With(authMiddleware).Post("/{id}/gallery", imgH.UploadGalleryImage)
+		r.With(authMiddleware).Delete("/{id}/gallery/{imageId}", imgH.DeleteGalleryImage)
+		r.With(authMiddleware).Patch("/{id}/gallery/{imageId}", imgH.UpdateGalleryImageMetadata)
 	})
 
 	r.Route("/admin", func(r chi.Router) {
@@ -130,4 +141,5 @@ func (a *API) routes() {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		r.Get("/", HealthHandler(a.store))
 	})
+
 }
