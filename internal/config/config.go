@@ -30,11 +30,8 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	bind := getEnv("BIND_ADDR", ":8080")
-	db := os.Getenv("DATABASE_URL")
-	if db == "" {
-		// default local postgres
-		db = getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dashboard?sslmode=disable")
-	}
+	db := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dashboard?sslmode=disable")
+	
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
