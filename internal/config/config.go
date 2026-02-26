@@ -18,17 +18,20 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
+	UploadDir          string
+	UploadBaseURL      string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	R2Endpoint         string
+	R2BucketName       string
 }
 
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	bind := getEnv("BIND_ADDR", ":8080")
-	db := os.Getenv("DATABASE_URL")
-	if db == "" {
-		// default local postgres
-		db = getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dashboard?sslmode=disable")
-	}
+	db := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dashboard?sslmode=disable")
+	
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
@@ -49,6 +52,12 @@ func Load() (*Config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+		UploadDir:          getEnv("UPLOAD_DIR", "./uploads"),
+		UploadBaseURL:      getEnv("UPLOAD_BASE_URL", "http://localhost:8080"),
+		R2AccessKeyID:      os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretAccessKey:  os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2Endpoint:         os.Getenv("R2_ENDPOINT"),
+		R2BucketName:       os.Getenv("R2_BUCKET_NAME"),
 	}, nil
 }
 
