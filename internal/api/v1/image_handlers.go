@@ -12,6 +12,7 @@ import (
 	"github.com/madhava-poojari/dashboard-api/internal/config"
 	"github.com/madhava-poojari/dashboard-api/internal/models"
 	"github.com/madhava-poojari/dashboard-api/internal/utils"
+	"gorm.io/datatypes"
 )
 
 type ImageHandler struct {
@@ -141,8 +142,7 @@ func (h *ImageHandler) ListGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isOwner := current.ID == id
-	images, err := h.store.ListGalleryImages(ctx, id, isOwner)
+	images, err := h.store.ListGalleryImages(ctx, id)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to list gallery", nil, err.Error())
 		return
@@ -207,16 +207,25 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "title is required", nil, nil)
 		return
 	}
-	positionInTournament := r.FormValue("position_in_tournament")
+
+	// Parse tags from JSON string (e.g. '["tag1","tag2"]')
+	var tags datatypes.JSON
+	tagsStr := r.FormValue("tags")
+	if tagsStr != "" {
+		tags = datatypes.JSON(tagsStr)
+	} else {
+		tags = datatypes.JSON("[]")
+	}
+
 	isPrivate := r.FormValue("is_private") == "true"
 
 	img := &models.Image{
-		UserID:               id,
-		URLSuffix:            urlSuffix,
-		Filename:             header.Filename,
-		Title:                title,
-		PositionInTournament: positionInTournament,
-		IsPrivate:            isPrivate,
+		UserID:    id,
+		URLSuffix: urlSuffix,
+		Filename:  header.Filename,
+		Title:     title,
+		Tags:      tags,
+		IsPrivate: isPrivate,
 	}
 
 	if err := h.store.CreateImage(ctx, img); err != nil {
@@ -233,8 +242,8 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 }
 
 // DELETE /users/{id}/gallery/{imageId}
+// Admin-only: only admins can delete gallery images from cloud storage.
 func (h *ImageHandler) DeleteGalleryImage(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
 	imageIdStr := chi.URLParam(r, "imageId")
 	ctx := r.Context()
 	current := auth.GetUserFromCtx(ctx)
@@ -243,9 +252,9 @@ func (h *ImageHandler) DeleteGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Only the owner can delete their gallery images
-	if current.ID != id {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "only the owner can delete gallery images", nil, nil)
+	// Only admin can delete gallery images
+	if current.Role != models.RoleAdmin {
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "only admins can delete gallery images", nil, nil)
 		return
 	}
 
@@ -258,12 +267,6 @@ func (h *ImageHandler) DeleteGalleryImage(w http.ResponseWriter, r *http.Request
 	img, err := h.store.GetImageByID(ctx, uint(imageId))
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "image not found", nil, nil)
-		return
-	}
-
-	// Verify the image belongs to this user
-	if img.UserID != id {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
@@ -315,9 +318,9 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 
 	// Parse JSON body
 	var body struct {
-		Title                *string `json:"title"`
-		PositionInTournament *string `json:"position_in_tournament"`
-		IsPrivate            *bool   `json:"is_private"`
+		Title     *string          `json:"title"`
+		Tags      *json.RawMessage `json:"tags"`
+		IsPrivate *bool            `json:"is_private"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "invalid request body", nil, err.Error())
@@ -332,8 +335,8 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 		}
 		fields["title"] = *body.Title
 	}
-	if body.PositionInTournament != nil {
-		fields["position_in_tournament"] = *body.PositionInTournament
+	if body.Tags != nil {
+		fields["tags"] = datatypes.JSON(*body.Tags)
 	}
 	if body.IsPrivate != nil {
 		fields["is_private"] = *body.IsPrivate
@@ -352,9 +355,9 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 	utils.WriteJSONResponse(w, http.StatusOK, true, "image metadata updated", nil, nil)
 }
 
-// GET /images/presign?key=...
-// Returns a presigned URL for the given R2 object key.
-func (h *ImageHandler) PresignURL(w http.ResponseWriter, r *http.Request) {
+// GET /images/academy-gallery?page=1&page_size=12
+// Returns all non-private images with pagination, presigned URLs, and uploader names.
+func (h *ImageHandler) ListAcademyGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	current := auth.GetUserFromCtx(ctx)
 	if current == nil {
@@ -362,19 +365,70 @@ func (h *ImageHandler) PresignURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := r.URL.Query().Get("key")
-	if key == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing key param", nil, nil)
-		return
+	// Parse pagination params
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("page_size")
+
+	page := 1
+	pageSize := 12
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+	if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 50 {
+		pageSize = ps
 	}
 
-	presignedURL, err := h.storage.PresignGetObject(key, 1*time.Hour)
+	images, total, err := h.store.ListAllPublicImages(ctx, page, pageSize)
 	if err != nil {
-		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to generate URL", nil, err.Error())
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to list gallery", nil, err.Error())
 		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusOK, true, "success", map[string]string{
-		"url": presignedURL,
+	// Collect unique user IDs to fetch names
+	userIDs := map[string]bool{}
+	for _, img := range images {
+		userIDs[img.UserID] = true
+	}
+
+	// Fetch user names
+	type userInfo struct {
+		FirstName string
+		LastName  string
+	}
+	userMap := map[string]userInfo{}
+	for uid := range userIDs {
+		u, err := h.store.GetUserByID(ctx, uid)
+		if err == nil {
+			userMap[uid] = userInfo{FirstName: u.FirstName, LastName: u.LastName}
+		}
+	}
+
+	// Build response
+	type imageResp struct {
+		models.Image
+		URL           string `json:"url"`
+		UserFirstName string `json:"user_first_name"`
+		UserLastName  string `json:"user_last_name"`
+	}
+	resp := make([]imageResp, len(images))
+	for i, img := range images {
+		presignedURL, _ := h.storage.PresignGetObject(img.URLSuffix, 1*time.Hour)
+		ui := userMap[img.UserID]
+		resp[i] = imageResp{
+			Image:         img,
+			URL:           presignedURL,
+			UserFirstName: ui.FirstName,
+			UserLastName:  ui.LastName,
+		}
+	}
+
+	totalPages := (int(total) + pageSize - 1) / pageSize
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", map[string]interface{}{
+		"images":      resp,
+		"page":        page,
+		"page_size":   pageSize,
+		"total":       total,
+		"total_pages": totalPages,
 	}, nil)
 }

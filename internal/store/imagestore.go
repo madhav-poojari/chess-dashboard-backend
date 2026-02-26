@@ -12,14 +12,10 @@ func (s *Store) CreateImage(ctx context.Context, img *models.Image) error {
 }
 
 // ListGalleryImages returns all gallery images for a user.
-// If isOwner is false, private images are excluded.
-func (s *Store) ListGalleryImages(ctx context.Context, userID string, isOwner bool) ([]models.Image, error) {
+// All images (including private) are returned; is_private only affects the academy gallery.
+func (s *Store) ListGalleryImages(ctx context.Context, userID string) ([]models.Image, error) {
 	var images []models.Image
-	q := s.DB.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC")
-	if !isOwner {
-		q = q.Where("is_private = ?", false)
-	}
-	err := q.Find(&images).Error
+	err := s.DB.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&images).Error
 	return images, err
 }
 
@@ -40,4 +36,23 @@ func (s *Store) DeleteImage(ctx context.Context, imageID uint) error {
 // UpdateImageMetadata updates the editable metadata fields of an image.
 func (s *Store) UpdateImageMetadata(ctx context.Context, imageID uint, fields map[string]interface{}) error {
 	return s.DB.WithContext(ctx).Model(&models.Image{}).Where("id = ?", imageID).Updates(fields).Error
+}
+
+// ListAllPublicImages returns non-private images across all users, with pagination.
+// Returns images and total count.
+func (s *Store) ListAllPublicImages(ctx context.Context, page, pageSize int) ([]models.Image, int64, error) {
+	var total int64
+	if err := s.DB.WithContext(ctx).Model(&models.Image{}).Where("is_private = ?", false).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var images []models.Image
+	offset := (page - 1) * pageSize
+	err := s.DB.WithContext(ctx).
+		Where("is_private = ?", false).
+		Order("created_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&images).Error
+	return images, total, err
 }

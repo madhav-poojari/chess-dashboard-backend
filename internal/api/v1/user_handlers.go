@@ -7,16 +7,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
+	"github.com/madhava-poojari/dashboard-api/internal/config"
 	"github.com/madhava-poojari/dashboard-api/internal/models"
 	"github.com/madhava-poojari/dashboard-api/internal/utils"
 )
 
 type UserHandler struct {
-	store serviceStore
+	store   serviceStore
+	storage *utils.R2Storage
 }
 
-func NewUserHandler(store serviceStore) *UserHandler {
-	return &UserHandler{store: store}
+func NewUserHandler(store serviceStore, cfg *config.Config) *UserHandler {
+	return &UserHandler{
+		store:   store,
+		storage: utils.NewR2Storage(cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Endpoint, cfg.R2BucketName),
+	}
 }
 
 // GET /users/{id}
@@ -46,6 +51,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "not found", nil, nil)
 		return
 	}
+	h.presignProfilePicture(u)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", u, nil)
 }
 
@@ -63,6 +69,7 @@ func (h *UserHandler) GetSelfProfile(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "not found", nil, nil)
 		return
 	}
+	h.presignProfilePicture(u)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", u, nil)
 }
 
@@ -273,4 +280,15 @@ func CanAccessStudentData(current *models.User, targetID string, coachId string,
 		return true
 	}
 	return false
+}
+
+// presignProfilePicture replaces the profile_picture_url suffix with a presigned URL.
+func (h *UserHandler) presignProfilePicture(u *models.User) {
+	if u == nil || u.UserDetails.ProfilePictureURL == "" {
+		return
+	}
+	presigned, err := h.storage.PresignGetObject(u.UserDetails.ProfilePictureURL, 1*time.Hour)
+	if err == nil {
+		u.UserDetails.ProfilePictureURL = presigned
+	}
 }

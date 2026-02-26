@@ -55,7 +55,7 @@ func (a *API) routes() {
 	ss := serviceStore{a.store}
 
 	authH := NewAuthHandler(a.cfg, usvc, ss)
-	userH := NewUserHandler(ss)
+	userH := NewUserHandler(ss, a.cfg)
 	adminH := NewAdminHandler(ss)
 	notesH := NewNotesHandler(ss)
 	attH := NewAttendanceHandler(ss)
@@ -119,10 +119,10 @@ func (a *API) routes() {
 		r.With(authMiddleware).Patch("/{id}/gallery/{imageId}", imgH.UpdateGalleryImageMetadata)
 	})
 
-	// Image presign (general purpose)
+	// Image routes (public gallery)
 	r.Route("/images", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
-		r.With(auth.AuthMiddleware(a.store)).Get("/presign", imgH.PresignURL)
+		r.With(auth.AuthMiddleware(a.store)).Get("/academy-gallery", imgH.ListAcademyGallery)
 	})
 
 	r.Route("/admin", func(r chi.Router) {
