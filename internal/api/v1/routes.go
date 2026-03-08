@@ -122,6 +122,9 @@ func (a *API) routes() {
 		adminGroup.Get("/students", adminH.GetStudentsWithAssignments)
 		adminGroup.Get("/coaches", adminH.GetCoachesWithAssignments)
 
+		adminGroup.Get("/coaches/picker", adminH.GetCoachesPicker)
+		adminGroup.Get("/mentors/picker", adminH.GetMentorsPicker)
+
 		// Unified assignment update endpoint (student<->coach, coach<->mentor)
 		adminGroup.Put("/assignments", adminH.UpdateAssignments)
 	})

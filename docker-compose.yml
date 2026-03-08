@@ -16,3 +16,56 @@ services:
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES}
       REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS}
       BIND_ADDR: :8080
+
+# services:
+#   db:
+#     image: postgres:16
+#     container_name: dashboard-db
+#     restart: unless-stopped
+#     environment:
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: postgres
+#       POSTGRES_DB: dashboard
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - db-data:/var/lib/postgresql/data
+
+#   redis:
+#     image: redis:latest
+#     container_name: dashboard-redis
+#     restart: unless-stopped
+#     ports:
+#       - "6379:6379"
+#     volumes:
+#       - redis-data:/data
+#     command: redis-server --appendonly yes
+
+#   api:
+#     build: .
+#     container_name: dashboard-api
+#     restart: unless-stopped
+#     depends_on:
+#       - db
+#       - redis
+#     ports:
+#       - "8080:8080"
+#     env_file:
+#       - .env
+
+#   migrate:
+#     image: migrate/migrate
+#     container_name: dashboard-migrate
+#     depends_on:
+#       - db
+#     volumes:
+#       - ./migrations:/migrations
+#     entrypoint: [
+#       "migrate",
+#       "-path", "/migrations",
+#       "-database", "postgres://postgres:postgres@db:5432/dashboard?sslmode=disable"
+#     ]
+
+# volumes:
+#   db-data:
+#   redis-data:
