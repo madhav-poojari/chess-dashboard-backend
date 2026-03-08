@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -34,19 +36,40 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to view their student.
 	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
 	if !CanAccessStudentData(current, id, coachId, mentorId) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
-	u, err := h.store.GetUserByID(r.Context(), id)
+	u, err := h.store.GetUserByID(ctx, id)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "not found", nil, nil)
 		return
 	}
-	utils.WriteJSONResponse(w, http.StatusOK, true, "success", u, nil)
+
+	var coachInfo *models.PersonInfo
+	var mentorInfo *models.PersonInfo
+
+	mentorInfo, err = h.getPersonInfoByID(ctx, mentorId)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch mentor", nil, nil)
+		return
+	}
+
+	coachInfo, err = h.getPersonInfoByID(ctx, coachId)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coach", nil, nil)
+		return
+	}
+
+	resp := models.UserResponse{
+		User:   u,
+		Coach:  coachInfo,
+		Mentor: mentorInfo,
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
 }
 
 // GET /users/self - get the profile of the requesting user
@@ -63,11 +86,37 @@ func (h *UserHandler) GetSelfProfile(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "not found", nil, nil)
 		return
 	}
-	utils.WriteJSONResponse(w, http.StatusOK, true, "success", u, nil)
+
+	var coachInfo *models.PersonInfo
+	var mentorInfo *models.PersonInfo
+
+	// fetch assigned coach & mentor
+	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, current.ID)
+
+	mentorInfo, err = h.getPersonInfoByID(ctx, mentorId)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch mentor", nil, nil)
+		return
+	}
+
+	coachInfo, err = h.getPersonInfoByID(ctx, coachId)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coach", nil, nil)
+		return
+	}
+
+	resp := models.UserResponse{
+		User:   u,
+		Coach:  coachInfo,
+		Mentor: mentorInfo,
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
 }
 
 // PUT /users/{id} - only allowed to update profile fields (not role, id, approval)
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	print("UpdateUser called")
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing id", nil, nil)
@@ -92,10 +141,19 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		Bio               *string                 `json:"bio,omitempty"`
 		ProfilePictureURL *string                 `json:"profile_picture_url,omitempty"`
 		AdditionalInfo    *map[string]interface{} `json:"additional_info,omitempty"`
+		SyllabusURL       *string                 `json:"syllabus_url,omitempty"`
+		PersonalMeetLink  *string                 `json:"personal_meet_link,omitempty"`
+		AddedInWhatsapp   *bool                   `json:"added_in_whatsapp,omitempty"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "bad request", nil, err.Error())
 		return
+	}
+	if payload.AddedInWhatsapp != nil {
+		fmt.Println("whatsapp in payload:", *payload.AddedInWhatsapp)
+	} else {
+		fmt.Println("whatsapp in payload: nil")
 	}
 
 	ctx := r.Context()
@@ -172,12 +230,22 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if payload.AdditionalInfo != nil {
 		detailUpdates["additional_info"] = *payload.AdditionalInfo
 	}
+	if payload.SyllabusURL != nil {
+		detailUpdates["syllabus_url"] = *payload.SyllabusURL
+	}
+	if payload.PersonalMeetLink != nil {
+		detailUpdates["personal_meet_link"] = *payload.PersonalMeetLink
+	}
+	if payload.AddedInWhatsapp != nil {
+		detailUpdates["added_in_whatsapp"] = *payload.AddedInWhatsapp
+	}
 	if payload.DOB != nil {
 		if t, err := time.Parse(time.RFC3339, *payload.DOB); err == nil {
 			detailUpdates["dob"] = t
 		}
 	}
 
+	print("detailUpdates length: ", len(detailUpdates))
 	if len(detailUpdates) > 0 {
 		if err := h.store.UpdateUserDetailsFields(ctx, id, detailUpdates); err != nil {
 			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "update details failed", nil, err.Error())
@@ -273,4 +341,31 @@ func CanAccessStudentData(current *models.User, targetID string, coachId string,
 		return true
 	}
 	return false
+}
+
+func (h *UserHandler) getPersonInfoByID(
+	ctx context.Context,
+	id string,
+) (*models.PersonInfo, error) {
+
+	if id == "" {
+		return nil, nil
+	}
+
+	user, err := h.store.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return nil, nil
+	}
+
+	return &models.PersonInfo{
+		Name:              user.FirstName + " " + user.LastName,
+		ProfilePictureURL: user.UserDetails.ProfilePictureURL,
+		FIDEID:            user.UserDetails.FIDEID,
+		Bio:               user.UserDetails.Bio,
+		PersonalMeetLink:  user.UserDetails.PersonalMeetLink,
+	}, nil
 }
