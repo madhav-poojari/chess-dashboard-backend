@@ -28,14 +28,15 @@ func (s *Store) GetImageByID(ctx context.Context, imageID uint) (*models.Image, 
 	return &img, nil
 }
 
-// DeleteImage hard-deletes an image record by ID.
+// DeleteImage soft-deletes an image record by ID (sets deleted_at).
 func (s *Store) DeleteImage(ctx context.Context, imageID uint) error {
-	return s.DB.WithContext(ctx).Unscoped().Delete(&models.Image{}, imageID).Error
+	return s.DB.WithContext(ctx).Delete(&models.Image{}, imageID).Error
 }
 
 // UpdateImageMetadata updates the editable metadata fields of an image.
-func (s *Store) UpdateImageMetadata(ctx context.Context, imageID uint, fields map[string]interface{}) error {
-	return s.DB.WithContext(ctx).Model(&models.Image{}).Where("id = ?", imageID).Updates(fields).Error
+// Scoped to user_id so that only images belonging to the given user are updated.
+func (s *Store) UpdateImageMetadata(ctx context.Context, userID string, imageID uint, fields map[string]interface{}) error {
+	return s.DB.WithContext(ctx).Model(&models.Image{}).Where("id = ? AND user_id = ?", imageID, userID).Updates(fields).Error
 }
 
 // ListAllPublicImages returns non-private images across all users, with pagination.
