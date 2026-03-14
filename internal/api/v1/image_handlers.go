@@ -16,16 +16,16 @@ import (
 )
 
 type ImageHandler struct {
-	store   serviceStore
-	storage *utils.R2Storage
-	cfg     *config.Config
+	store        serviceStore
+	imageStorage *utils.R2Storage
+	cfg          *config.Config
 }
 
 func NewImageHandler(store serviceStore, cfg *config.Config) *ImageHandler {
 	return &ImageHandler{
-		store:   store,
-		storage: utils.NewR2Storage(cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Endpoint, cfg.R2BucketName),
-		cfg:     cfg,
+		store:        store,
+		imageStorage: utils.NewR2Storage(cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Endpoint, cfg.R2BucketName),
+		cfg:          cfg,
 	}
 }
 
@@ -39,8 +39,7 @@ func (h *ImageHandler) UploadProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -65,11 +64,11 @@ func (h *ImageHandler) UploadProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if user.UserDetails.ProfilePictureURL != "" {
-		_ = h.storage.DeleteFile(user.UserDetails.ProfilePictureURL)
+		_ = h.imageStorage.DeleteFile(user.UserDetails.ProfilePictureURL)
 	}
 
 	// Save new file
-	urlSuffix, err := h.storage.SaveFile("profile-pictures", header.Filename, file)
+	urlSuffix, err := h.imageStorage.SaveFile("profile-pictures", header.Filename, file)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to save file", nil, err.Error())
 		return
@@ -83,7 +82,7 @@ func (h *ImageHandler) UploadProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fullURL, _ := h.storage.PresignGetObject(urlSuffix, 1*time.Hour)
+	fullURL, _ := h.imageStorage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "profile picture uploaded", map[string]string{
 		"url_suffix": urlSuffix,
 		"url":        fullURL,
@@ -100,8 +99,7 @@ func (h *ImageHandler) DeleteProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -113,7 +111,7 @@ func (h *ImageHandler) DeleteProfilePicture(w http.ResponseWriter, r *http.Reque
 	}
 
 	if user.UserDetails.ProfilePictureURL != "" {
-		_ = h.storage.DeleteFile(user.UserDetails.ProfilePictureURL)
+		_ = h.imageStorage.DeleteFile(user.UserDetails.ProfilePictureURL)
 	}
 
 	if err := h.store.UpdateUserDetailsFields(ctx, id, map[string]interface{}{
@@ -136,8 +134,7 @@ func (h *ImageHandler) ListGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -155,7 +152,7 @@ func (h *ImageHandler) ListGallery(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := make([]imageResp, len(images))
 	for i, img := range images {
-		presignedURL, _ := h.storage.PresignGetObject(img.URLSuffix, 1*time.Hour)
+		presignedURL, _ := h.imageStorage.PresignGetObject(img.URLSuffix, 1*time.Hour)
 		resp[i] = imageResp{
 			Image: img,
 			URL:   presignedURL,
@@ -175,9 +172,9 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Only the owner can upload to their own gallery
-	if current.ID != id {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "only the owner can upload gallery images", nil, nil)
+	// Coach, mentor, admin, or the student themselves can upload
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
@@ -195,7 +192,7 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 	defer file.Close()
 
 	subDir := fmt.Sprintf("gallery/%s", id)
-	urlSuffix, err := h.storage.SaveFile(subDir, header.Filename, file)
+	urlSuffix, err := h.imageStorage.SaveFile(subDir, header.Filename, file)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to save file", nil, err.Error())
 		return
@@ -222,7 +219,6 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 	img := &models.Image{
 		UserID:    id,
 		URLSuffix: urlSuffix,
-		Filename:  header.Filename,
 		Title:     title,
 		Tags:      tags,
 		IsPrivate: isPrivate,
@@ -233,7 +229,7 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	fullURL, _ := h.storage.PresignGetObject(urlSuffix, 1*time.Hour)
+	fullURL, _ := h.imageStorage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusCreated, true, "gallery image uploaded", map[string]interface{}{
 		"id":         img.ID,
 		"url_suffix": urlSuffix,
@@ -264,14 +260,13 @@ func (h *ImageHandler) DeleteGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	img, err := h.store.GetImageByID(ctx, uint(imageId))
+	_, err = h.store.GetImageByID(ctx, uint(imageId))
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "image not found", nil, nil)
 		return
 	}
 
-	// Delete file from R2
-	_ = h.storage.DeleteFile(img.URLSuffix)
+	// Soft delete: do NOT delete file from R2, just mark as deleted in DB
 
 	// Delete DB record
 	if err := h.store.DeleteImage(ctx, uint(imageId)); err != nil {
@@ -293,26 +288,15 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Only the owner can edit their gallery images
-	if current.ID != id {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "only the owner can edit gallery images", nil, nil)
+	// Coach, mentor, admin, or the student themselves can edit
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
 	imageId, err := strconv.ParseUint(imageIdStr, 10, 32)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "invalid image id", nil, nil)
-		return
-	}
-
-	img, err := h.store.GetImageByID(ctx, uint(imageId))
-	if err != nil {
-		utils.WriteJSONResponse(w, http.StatusNotFound, false, "image not found", nil, nil)
-		return
-	}
-
-	if img.UserID != id {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
@@ -347,7 +331,7 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.store.UpdateImageMetadata(ctx, uint(imageId), fields); err != nil {
+	if err := h.store.UpdateImageMetadata(ctx, id, uint(imageId), fields); err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to update image", nil, err.Error())
 		return
 	}
@@ -412,7 +396,7 @@ func (h *ImageHandler) ListAcademyGallery(w http.ResponseWriter, r *http.Request
 	}
 	resp := make([]imageResp, len(images))
 	for i, img := range images {
-		presignedURL, _ := h.storage.PresignGetObject(img.URLSuffix, 1*time.Hour)
+		presignedURL, _ := h.imageStorage.PresignGetObject(img.URLSuffix, 1*time.Hour)
 		ui := userMap[img.UserID]
 		resp[i] = imageResp{
 			Image:         img,
