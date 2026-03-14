@@ -132,4 +132,5 @@ type Image struct {
 	IsPrivate            bool           `gorm:"default:false" json:"is_private"`
 	CreatedAt            time.Time      `json:"created_at"`
 	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
+	Filename			 string         `gorm:"null" json:"filename"`
 }
