@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,10 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// R2Storage handles saving, deleting, and presigning files on Cloudflare R2.
+// R2Storage handles saving and deleting files on Cloudflare R2.
 type R2Storage struct {
 	client     *s3.Client
-	presigner  *s3.PresignClient
 	bucketName string
 }
 
@@ -39,7 +40,6 @@ func NewR2Storage(accessKeyID, secretAccessKey, endpoint, bucketName string) *R2
 
 	return &R2Storage{
 		client:     client,
-		presigner:  s3.NewPresignClient(client),
 		bucketName: bucketName,
 	}
 }
@@ -47,15 +47,22 @@ func NewR2Storage(accessKeyID, secretAccessKey, endpoint, bucketName string) *R2
 // SaveFile uploads the contents of reader to R2 at <subDir>/<uniqueFilename>.
 // It returns the object key (url_suffix) that can be stored in DB.
 func (rs *R2Storage) SaveFile(subDir, originalFilename string, reader io.Reader) (string, error) {
-	ext := filepath.Ext(originalFilename)
+	ext := strings.ToLower(filepath.Ext(originalFilename))
 	uniqueName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 	// Use forward slashes for the object key
 	objectKey := subDir + "/" + uniqueName
 
+	// Detect MIME type from file extension so browsers display images inline
+	contentType := mime.TypeByExtension(ext)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
 	_, err := rs.client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket: aws.String(rs.bucketName),
-		Key:    aws.String(objectKey),
-		Body:   reader,
+		Bucket:      aws.String(rs.bucketName),
+		Key:         aws.String(objectKey),
+		Body:        reader,
+		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to upload to R2: %w", err)
@@ -77,15 +84,4 @@ func (rs *R2Storage) DeleteFile(objectKey string) error {
 	return nil
 }
 
-// PresignGetObject generates a presigned GET URL for the given object key.
-// The URL is valid for the specified duration.
-func (rs *R2Storage) PresignGetObject(objectKey string, duration time.Duration) (string, error) {
-	req, err := rs.presigner.PresignGetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(rs.bucketName),
-		Key:    aws.String(objectKey),
-	}, s3.WithPresignExpires(duration))
-	if err != nil {
-		return "", fmt.Errorf("failed to presign URL: %w", err)
-	}
-	return req.URL, nil
-}
+

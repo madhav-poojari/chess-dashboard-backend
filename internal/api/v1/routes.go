@@ -55,7 +55,7 @@ func (a *API) routes() {
 	ss := serviceStore{a.store}
 
 	authH := NewAuthHandler(a.cfg, usvc, ss)
-	userH := NewUserHandler(ss, a.cfg)
+	userH := NewUserHandler(ss)
 	adminH := NewAdminHandler(ss)
 	notesH := NewNotesHandler(ss)
 	attH := NewAttendanceHandler(ss)

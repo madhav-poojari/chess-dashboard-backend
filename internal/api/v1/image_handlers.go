@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
@@ -82,10 +81,8 @@ func (h *ImageHandler) UploadProfilePicture(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fullURL, _ := h.imageStorage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "profile picture uploaded", map[string]string{
 		"url_suffix": urlSuffix,
-		"url":        fullURL,
 	}, nil)
 }
 
@@ -145,21 +142,7 @@ func (h *ImageHandler) ListGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build presigned URLs
-	type imageResp struct {
-		models.Image
-		URL string `json:"url"`
-	}
-	resp := make([]imageResp, len(images))
-	for i, img := range images {
-		presignedURL, _ := h.imageStorage.PresignGetObject(img.URLSuffix, 1*time.Hour)
-		resp[i] = imageResp{
-			Image: img,
-			URL:   presignedURL,
-		}
-	}
-
-	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", images, nil)
 }
 
 // POST /users/{id}/gallery
@@ -229,11 +212,9 @@ func (h *ImageHandler) UploadGalleryImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	fullURL, _ := h.imageStorage.PresignGetObject(urlSuffix, 1*time.Hour)
 	utils.WriteJSONResponse(w, http.StatusCreated, true, "gallery image uploaded", map[string]interface{}{
 		"id":         img.ID,
 		"url_suffix": urlSuffix,
-		"url":        fullURL,
 	}, nil)
 }
 
@@ -340,7 +321,7 @@ func (h *ImageHandler) UpdateGalleryImageMetadata(w http.ResponseWriter, r *http
 }
 
 // GET /images/academy-gallery?page=1&page_size=12
-// Returns all non-private images with pagination, presigned URLs, and uploader names.
+// Returns all non-private images with pagination and uploader names.
 func (h *ImageHandler) ListAcademyGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	current := auth.GetUserFromCtx(ctx)
@@ -387,20 +368,17 @@ func (h *ImageHandler) ListAcademyGallery(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Build response
+	// Build response with uploader names
 	type imageResp struct {
 		models.Image
-		URL           string `json:"url"`
 		UserFirstName string `json:"user_first_name"`
 		UserLastName  string `json:"user_last_name"`
 	}
 	resp := make([]imageResp, len(images))
 	for i, img := range images {
-		presignedURL, _ := h.imageStorage.PresignGetObject(img.URLSuffix, 1*time.Hour)
 		ui := userMap[img.UserID]
 		resp[i] = imageResp{
 			Image:         img,
-			URL:           presignedURL,
 			UserFirstName: ui.FirstName,
 			UserLastName:  ui.LastName,
 		}
