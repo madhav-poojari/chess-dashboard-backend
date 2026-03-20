@@ -122,3 +122,15 @@ type Attendance struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+type Image struct {
+	ID                   uint           `gorm:"primaryKey" json:"id"`
+	UserID               string         `gorm:"index;size:10;not null" json:"user_id"`
+	URLSuffix            string         `gorm:"column:url_suffix;not null" json:"url_suffix"`
+	Title                string         `gorm:"not null" json:"title"`
+	Tags                 datatypes.JSON `gorm:"type:jsonb;default:'[]'" json:"tags"`
+	IsPrivate            bool           `gorm:"default:false" json:"is_private"`
+	CreatedAt            time.Time      `json:"created_at"`
+	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
+	Filename			 string         `gorm:"null" json:"filename"`
+}

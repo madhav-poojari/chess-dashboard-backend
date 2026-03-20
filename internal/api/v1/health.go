@@ -20,6 +20,7 @@ func HealthHandler(s *store.Store) http.HandlerFunc {
 			Data: map[string]interface{}{
 				"db":   ok,
 				"time": time.Now(),
+				"environment": "stage",
 			},
 		}
 		if !ok {

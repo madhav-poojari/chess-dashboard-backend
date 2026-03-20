@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/madhava-poojari/dashboard-api/internal/auth"
 	"github.com/madhava-poojari/dashboard-api/internal/models"
+	"github.com/madhava-poojari/dashboard-api/internal/store"
 	"github.com/madhava-poojari/dashboard-api/internal/utils"
 )
 
@@ -16,7 +18,9 @@ type UserHandler struct {
 }
 
 func NewUserHandler(store serviceStore) *UserHandler {
-	return &UserHandler{store: store}
+	return &UserHandler{
+		store: store,
+	}
 }
 
 // GET /users/{id}
@@ -35,8 +39,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to view their student.
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -106,8 +109,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to update their student.
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -268,9 +270,11 @@ func (h *UserHandler) ResetOwnPassword(w http.ResponseWriter, r *http.Request) {
 	utils.WriteJSONResponse(w, http.StatusOK, true, "password reset successfully", nil, nil)
 }
 
-func CanAccessStudentData(current *models.User, targetID string, coachId string, mentorId string) bool {
-	if current.ID == targetID || current.Role == "admin" || current.ID == coachId || current.ID == mentorId {
+func CanAccessStudentData(ctx context.Context, s *store.Store, current *models.User, targetID string) bool {
+	if current.ID == targetID || current.Role == "admin" {
 		return true
 	}
-	return false
+	coachID, mentorID, _ := s.GetCoachesByStudentID(ctx, targetID)
+	return current.ID == coachID || current.ID == mentorID
 }
+
