@@ -134,3 +134,33 @@ type Image struct {
 	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
 	Filename			 string         `gorm:"null" json:"filename"`
 }
+
+type ZipcodeScrapeScope struct {
+	Zipcode     string     `gorm:"primaryKey;size:10" json:"zipcode"`
+	Distance    int        `gorm:"primaryKey" json:"distance"`
+	LastScraped *time.Time `json:"last_scraped"`
+}
+
+func (ZipcodeScrapeScope) TableName() string { return "zipcode_scrape_scopes" }
+
+type Tournament struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	Title       string     `json:"title"`
+	URLPath     string     `gorm:"column:url_path;uniqueIndex" json:"url_path"`
+	City        string     `json:"city"`
+	State       string     `json:"state"`
+	Dates       string     `json:"dates"`
+	StartDate   *time.Time `gorm:"type:date" json:"start_date"`
+	Organizer   string     `json:"organizer"`
+	Description string     `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type TournamentWithinRadius struct {
+	Zipcode      string `gorm:"primaryKey;size:10" json:"zipcode"`
+	Distance     int    `gorm:"primaryKey" json:"distance"`
+	TournamentID uint   `gorm:"primaryKey" json:"tournament_id"`
+}
+
+func (TournamentWithinRadius) TableName() string { return "tournaments_within_radius" }
+
