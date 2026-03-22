@@ -35,6 +35,9 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 		&models.Note{},
 		&models.Attendance{},
 		&models.Image{},
+		&models.ZipcodeScrapeScope{},
+		&models.Tournament{},
+		&models.TournamentWithinRadius{},
 	); err != nil {
 		return nil, err
 	}

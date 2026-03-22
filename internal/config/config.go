@@ -24,6 +24,7 @@ type Config struct {
 	R2SecretAccessKey  string
 	R2Endpoint         string
 	R2BucketName       string
+	ScraperAPIKey      string
 }
 
 func Load() (*Config, error) {
@@ -58,6 +59,7 @@ func Load() (*Config, error) {
 		R2SecretAccessKey:  os.Getenv("R2_SECRET_ACCESS_KEY"),
 		R2Endpoint:         os.Getenv("R2_ENDPOINT"),
 		R2BucketName:       os.Getenv("R2_BUCKET_NAME"),
+		ScraperAPIKey:      os.Getenv("SCRAPER_API_KEY"),
 	}, nil
 }
 

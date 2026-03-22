@@ -270,6 +270,35 @@ func (h *UserHandler) ResetOwnPassword(w http.ResponseWriter, r *http.Request) {
 	utils.WriteJSONResponse(w, http.StatusOK, true, "password reset successfully", nil, nil)
 }
 
+// GET /users/{id}/tournaments - get upcoming tournaments near the user
+func (h *UserHandler) GetTournaments(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing id", nil, nil)
+		return
+	}
+
+	ctx := r.Context()
+	current := auth.GetUserFromCtx(ctx)
+	if current == nil {
+		utils.WriteJSONResponse(w, http.StatusUnauthorized, false, "unauthorized", nil, nil)
+		return
+	}
+
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
+		return
+	}
+
+	tournaments, err := h.store.GetTournamentsByUserID(ctx, id)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching tournaments", nil, err.Error())
+		return
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", tournaments, nil)
+}
+
 func CanAccessStudentData(ctx context.Context, s *store.Store, current *models.User, targetID string) bool {
 	if current.ID == targetID || current.Role == "admin" {
 		return true
