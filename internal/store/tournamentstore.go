@@ -11,7 +11,7 @@ import (
 )
 
 // Hardcoded distances (miles) used for scraping
-var ScrapingDistances = []int{10, 20, 30}
+var ScrapingDistances = []int{15, 30, 60}
 
 // SyncZipcodesFromUserDetails ensures the zipcode_scrape_scopes table
 // contains 3 rows per active student zipcode (one per distance).
