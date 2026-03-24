@@ -36,6 +36,9 @@ type UserDetails struct {
 	FIDEID            string            `gorm:"column:fide_id" json:"fide_id"`
 	Bio               string            `json:"bio"`
 	ProfilePictureURL string            `json:"profile_picture_url"`
+	SyllabusURL       string            `json:"syllabus_url"`
+	AddedInWhatsapp   bool              `gorm:"default:false" json:"added_in_whatsapp"`
+	PersonalMeetLink string            `json:"personal_meet_link"`
 	AdditionalInfo    datatypes.JSONMap `gorm:"type:jsonb" json:"additional_info"`
 	UpdatedAt         time.Time         `json:"updated_at"`
 }
