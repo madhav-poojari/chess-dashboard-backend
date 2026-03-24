@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -90,6 +91,85 @@ func (s *Store) ListStudentsWithAssignments(ctx context.Context) ([]*StudentWith
 	result = append(result, assigned...)
 
 	return result, nil
+}
+
+type CoachPickerItem struct {
+    ID                string `json:"id"`
+    FirstName         string `json:"first_name"`
+    LastName          string `json:"last_name"`
+    CurrentStudentCount int  `json:"current_student_count"`
+}
+
+// ListCoachesForPicker returns all active coaches with their real student count.
+func (s *Store) ListCoachesForPicker(ctx context.Context) ([]*CoachPickerItem, error) {
+    var coaches []models.User
+    if err := s.DB.WithContext(ctx).
+        Where("role = ? AND active = ?", "coach", true).
+        Find(&coaches).Error; err != nil {
+        return nil, err
+    }
+
+    var relations []models.Relation
+    if err := s.DB.WithContext(ctx).Find(&relations).Error; err != nil && err != gorm.ErrRecordNotFound {
+        return nil, err
+    }
+
+    studentCountMap := make(map[string]int)
+    for _, r := range relations {
+        if r.CoachID != "" && !strings.HasPrefix(r.UserID, "T-") {
+            studentCountMap[r.CoachID]++
+        }
+    }
+
+    result := make([]*CoachPickerItem, 0, len(coaches))
+    for _, c := range coaches {
+        result = append(result, &CoachPickerItem{
+            ID:                  c.ID,
+            FirstName:           c.FirstName,
+            LastName:            c.LastName,
+            CurrentStudentCount: studentCountMap[c.ID],
+        })
+    }
+    return result, nil
+}
+
+// ListMentorsForPicker returns all active mentors with their real student count.
+// A mentor's student count = number of relations where MentorID = mentor's ID (excluding T- students).
+func (s *Store) ListMentorsForPicker(ctx context.Context) ([]*CoachPickerItem, error) {
+    // Step 1: fetch all active mentors
+    var mentors []models.User
+    if err := s.DB.WithContext(ctx).
+        Where("role = ? AND active = ?", "mentor", true).
+        Find(&mentors).Error; err != nil {
+        return nil, err
+    }
+
+    // Step 2: fetch all relations
+    var relations []models.Relation
+    if err := s.DB.WithContext(ctx).Find(&relations).Error; err != nil && err != gorm.ErrRecordNotFound {
+        return nil, err
+    }
+
+    // Step 3: count students per mentor
+    // A mentor oversees a student when they appear as MentorID in a relation
+    studentCountMap := make(map[string]int)
+    for _, r := range relations {
+        if r.MentorID != "" && !strings.HasPrefix(r.UserID, "T-") {
+            studentCountMap[r.MentorID]++
+        }
+    }
+
+    // Step 4: assemble result
+    result := make([]*CoachPickerItem, 0, len(mentors))
+    for _, m := range mentors {
+        result = append(result, &CoachPickerItem{
+            ID:                  m.ID,
+            FirstName:           m.FirstName,
+            LastName:            m.LastName,
+            CurrentStudentCount: studentCountMap[m.ID],
+        })
+    }
+    return result, nil
 }
 
 // CoachWithAssignment represents a coach with their student assignment info
@@ -298,6 +378,28 @@ func (s *Store) SetStudentCoachAssignment(ctx context.Context, studentID, coachI
 		trackingID := trackingUserIDForCoach(coachID)
 		return tx.Where("coach_id = ? AND user_id = ?", coachID, trackingID).Delete(&models.Relation{}).Error
 	})
+}
+
+
+func (s *Store) SetStudentMentor(ctx context.Context, studentID, mentorID string) error {
+    return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+        var existing models.Relation
+        err := tx.Where("user_id = ?", studentID).First(&existing).Error
+
+        if err != nil && err != gorm.ErrRecordNotFound {
+            return err
+        }
+
+        // No existing row — need coach_id to create, can't assign mentor alone
+        if err == gorm.ErrRecordNotFound {
+            return fmt.Errorf("student has no coach assigned yet")
+        }
+
+        // Update mentor (empty string = unassign)
+        return tx.Model(&models.Relation{}).
+            Where("user_id = ?", studentID).
+            Update("mentor_id", mentorID).Error
+    })
 }
 
 // SetCoachMentorAssignment assigns/removes a mentor for a coach.
