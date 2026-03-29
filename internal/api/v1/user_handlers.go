@@ -41,7 +41,8 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 
 	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to view their student.
 	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
-	if !CanAccessStudentData(current, id, coachId, mentorId) {
+
+	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
@@ -66,13 +67,13 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coach", nil, nil)
 		return
 	}
-
+	
 	resp := models.UserResponse{
 		User:   u,
 		Coach:  coachInfo,
 		Mentor: mentorInfo,
 	}
-
+	fmt.Println("Sending response: ", resp)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
 }
 

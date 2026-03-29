@@ -9,7 +9,7 @@ import (
 
 type User struct {
 	ID    string `gorm:"primaryKey;size:10" json:"id"`
-	Email string `gorm:"uniqueIndex;not null" json:"email"`
+	Email string `gorm:"unique;not null" json:"email"`
 
 	PasswordHash string      `json:"-"`
 	FirstName    string      `json:"first_name"`
@@ -38,7 +38,7 @@ type UserDetails struct {
 	ProfilePictureURL string            `json:"profile_picture_url"`
 	SyllabusURL       string            `json:"syllabus_url"`
 	AddedInWhatsapp   bool              `gorm:"default:false" json:"added_in_whatsapp"`
-	PersonalMeetLink string            `json:"personal_meet_link"`
+	PersonalMeetLink  string            `json:"personal_meet_link"`
 	AdditionalInfo    datatypes.JSONMap `gorm:"type:jsonb" json:"additional_info"`
 	UpdatedAt         time.Time         `json:"updated_at"`
 }
@@ -127,15 +127,15 @@ type Attendance struct {
 }
 
 type Image struct {
-	ID                   uint           `gorm:"primaryKey" json:"id"`
-	UserID               string         `gorm:"index;size:10;not null" json:"user_id"`
-	URLSuffix            string         `gorm:"column:url_suffix;not null" json:"url_suffix"`
-	Title                string         `gorm:"not null" json:"title"`
-	Tags                 datatypes.JSON `gorm:"type:jsonb;default:'[]'" json:"tags"`
-	IsPrivate            bool           `gorm:"default:false" json:"is_private"`
-	CreatedAt            time.Time      `json:"created_at"`
-	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
-	Filename			 string         `gorm:"null" json:"filename"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	UserID    string         `gorm:"index;size:10;not null" json:"user_id"`
+	URLSuffix string         `gorm:"column:url_suffix;not null" json:"url_suffix"`
+	Title     string         `gorm:"not null" json:"title"`
+	Tags      datatypes.JSON `gorm:"type:jsonb;default:'[]'" json:"tags"`
+	IsPrivate bool           `gorm:"default:false" json:"is_private"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	Filename  string         `gorm:"null" json:"filename"`
 }
 
 type ZipcodeScrapeScope struct {
@@ -166,4 +166,3 @@ type TournamentWithinRadius struct {
 }
 
 func (TournamentWithinRadius) TableName() string { return "tournaments_within_radius" }
-
