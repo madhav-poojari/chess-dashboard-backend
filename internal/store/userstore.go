@@ -47,6 +47,7 @@ func (s *Store) UpdateUserFields(ctx context.Context, id string, fields map[stri
 }
 
 func (s *Store) UpdateUserDetailsFields(ctx context.Context, id string, fields map[string]interface{}) error {
+	print("Updating user details for user ID:", id, "with fields:", fields)
 	fields["updated_at"] = time.Now()
 	tx := s.DB.WithContext(ctx)
 	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.UserDetails{UserID: id}).Error; err != nil {
@@ -88,4 +89,30 @@ func (s *Store) GetCoachesByStudentID(ctx context.Context, studentID string) (st
 		return "", "", err
 	}
 	return r.CoachID, r.MentorID, nil
+}
+
+func GetMentorCoachDetails(db *gorm.DB, studentID string) (string, string, string, string, error) {
+	var relation models.Relation
+
+	if err := db.Where("user_id = ?", studentID).First(&relation).Error; err != nil {
+		return "", "", "", "", err
+	}
+
+	var coach models.User
+	var mentor models.User
+
+	var coachDetails models.UserDetails
+	var mentorDetails models.UserDetails
+
+	db.First(&coach, "id = ?", relation.CoachID)
+	db.First(&coachDetails, "user_id = ?", relation.CoachID)
+
+	db.First(&mentor, "id = ?", relation.MentorID)
+	db.First(&mentorDetails, "user_id = ?", relation.MentorID)
+
+	coachName := coach.FirstName + " " + coach.LastName
+	mentorName := mentor.FirstName + " " + mentor.LastName
+
+	return coachName, coachDetails.Phone,
+		mentorName, mentorDetails.Phone, nil
 }

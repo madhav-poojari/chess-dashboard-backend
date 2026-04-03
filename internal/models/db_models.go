@@ -9,7 +9,7 @@ import (
 
 type User struct {
 	ID    string `gorm:"primaryKey;size:10" json:"id"`
-	Email string `gorm:"uniqueIndex;not null" json:"email"`
+	Email string `gorm:"unique;not null" json:"email"`
 
 	PasswordHash string      `json:"-"`
 	FirstName    string      `json:"first_name"`
@@ -36,6 +36,9 @@ type UserDetails struct {
 	FIDEID            string            `gorm:"column:fide_id" json:"fide_id"`
 	Bio               string            `json:"bio"`
 	ProfilePictureURL string            `json:"profile_picture_url"`
+	SyllabusURL       string            `json:"syllabus_url"`
+	AddedInWhatsapp   bool              `gorm:"default:false" json:"added_in_whatsapp"`
+	PersonalMeetLink  string            `json:"personal_meet_link"`
 	AdditionalInfo    datatypes.JSONMap `gorm:"type:jsonb" json:"additional_info"`
 	UpdatedAt         time.Time         `json:"updated_at"`
 }
@@ -124,13 +127,42 @@ type Attendance struct {
 }
 
 type Image struct {
-	ID                   uint           `gorm:"primaryKey" json:"id"`
-	UserID               string         `gorm:"index;size:10;not null" json:"user_id"`
-	URLSuffix            string         `gorm:"column:url_suffix;not null" json:"url_suffix"`
-	Title                string         `gorm:"not null" json:"title"`
-	Tags                 datatypes.JSON `gorm:"type:jsonb;default:'[]'" json:"tags"`
-	IsPrivate            bool           `gorm:"default:false" json:"is_private"`
-	CreatedAt            time.Time      `json:"created_at"`
-	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
-	Filename			 string         `gorm:"null" json:"filename"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	UserID    string         `gorm:"index;size:10;not null" json:"user_id"`
+	URLSuffix string         `gorm:"column:url_suffix;not null" json:"url_suffix"`
+	Title     string         `gorm:"not null" json:"title"`
+	Tags      datatypes.JSON `gorm:"type:jsonb;default:'[]'" json:"tags"`
+	IsPrivate bool           `gorm:"default:false" json:"is_private"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	Filename  string         `gorm:"null" json:"filename"`
 }
+
+type ZipcodeScrapeScope struct {
+	Zipcode     string     `gorm:"primaryKey;size:10" json:"zipcode"`
+	Distance    int        `gorm:"primaryKey" json:"distance"`
+	LastScraped *time.Time `json:"last_scraped"`
+}
+
+func (ZipcodeScrapeScope) TableName() string { return "zipcode_scrape_scopes" }
+
+type Tournament struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	Title       string     `json:"title"`
+	URLPath     string     `gorm:"column:url_path;uniqueIndex" json:"url_path"`
+	City        string     `json:"city"`
+	State       string     `json:"state"`
+	Dates       string     `json:"dates"`
+	StartDate   *time.Time `gorm:"type:date" json:"start_date"`
+	Organizer   string     `json:"organizer"`
+	Description string     `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type TournamentWithinRadius struct {
+	Zipcode      string `gorm:"primaryKey;size:10" json:"zipcode"`
+	Distance     int    `gorm:"primaryKey" json:"distance"`
+	TournamentID uint   `gorm:"primaryKey" json:"tournament_id"`
+}
+
+func (TournamentWithinRadius) TableName() string { return "tournaments_within_radius" }

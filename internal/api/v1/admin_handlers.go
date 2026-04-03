@@ -83,6 +83,24 @@ func (h *AdminHandler) GetStudentsWithAssignments(w http.ResponseWriter, r *http
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", students, nil)
 }
 
+func (h *AdminHandler) GetCoachesPicker(w http.ResponseWriter, r *http.Request) {
+	coaches, err := h.store.ListCoachesForPicker(r.Context())
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching coaches", nil, err)
+		return
+	}
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", coaches, nil)
+}
+
+func (h *AdminHandler) GetMentorsPicker(w http.ResponseWriter, r *http.Request) {
+	mentors, err := h.store.ListMentorsForPicker(r.Context())
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching mentors", nil, err)
+		return
+	}
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", mentors, nil)
+}
+
 // GetCoachesWithAssignments returns all coaches with their assignment info
 func (h *AdminHandler) GetCoachesWithAssignments(w http.ResponseWriter, r *http.Request) {
 	coaches, err := h.store.ListCoachesWithAssignments(r.Context())
@@ -104,6 +122,7 @@ func (h *AdminHandler) UpdateAssignments(w http.ResponseWriter, r *http.Request)
 		StudentID      string `json:"student_id,omitempty"`
 		CoachID        string `json:"coach_id,omitempty"`
 		MentorCoachID  string `json:"mentor_coach_id,omitempty"`
+		MentorID       string `json:"mentor_id,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -130,6 +149,18 @@ func (h *AdminHandler) UpdateAssignments(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if err := h.store.SetCoachMentorAssignment(r.Context(), payload.CoachID, payload.MentorCoachID); err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating mentor assignment", nil, err)
+			return
+		}
+		utils.WriteJSONResponse(w, http.StatusOK, true, "mentor assignment updated", nil, nil)
+		return
+
+	case "student_mentor":
+		if payload.StudentID == "" {
+			utils.WriteJSONResponse(w, http.StatusBadRequest, false, "student_id is required", nil, nil)
+			return
+		}
+		if err := h.store.SetStudentMentor(r.Context(), payload.StudentID, payload.MentorID); err != nil {
 			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error updating mentor assignment", nil, err)
 			return
 		}

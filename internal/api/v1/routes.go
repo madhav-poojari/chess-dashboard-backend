@@ -60,6 +60,7 @@ func (a *API) routes() {
 	notesH := NewNotesHandler(ss)
 	attH := NewAttendanceHandler(ss)
 	imgH := NewImageHandler(ss, a.cfg)
+	scraperH := NewScraperHandler(ss, a.cfg)
 
 	r := a.router
 	// auth routes
@@ -117,6 +118,9 @@ func (a *API) routes() {
 		r.With(authMiddleware).Post("/{id}/gallery", imgH.UploadGalleryImage)
 		r.With(authMiddleware).Delete("/{id}/gallery/{imageId}", imgH.DeleteGalleryImage)
 		r.With(authMiddleware).Patch("/{id}/gallery/{imageId}", imgH.UpdateGalleryImageMetadata)
+
+		// Tournaments (nearby)
+		r.With(authMiddleware).Get("/{id}/tournaments", userH.GetTournaments)
 	})
 
 	// Image routes (public gallery)
@@ -139,6 +143,9 @@ func (a *API) routes() {
 		adminGroup.Get("/students", adminH.GetStudentsWithAssignments)
 		adminGroup.Get("/coaches", adminH.GetCoachesWithAssignments)
 
+		adminGroup.Get("/coaches/picker", adminH.GetCoachesPicker)
+		adminGroup.Get("/mentors/picker", adminH.GetMentorsPicker)
+
 		// Unified assignment update endpoint (student<->coach, coach<->mentor)
 		adminGroup.Put("/assignments", adminH.UpdateAssignments)
 	})
@@ -146,6 +153,14 @@ func (a *API) routes() {
 	r.Route("/health", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		r.Get("/", HealthHandler(a.store))
+	})
+
+	// Scraper routes (API-key protected, used by the Chrome extension)
+	r.Route("/scraper", func(r chi.Router) {
+		r.Use(scraperH.APIKeyAuth)
+		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
+		r.Get("/zipcodes", scraperH.GetZipcodes)
+		r.Post("/tournaments", scraperH.SubmitTournaments)
 	})
 
 }
