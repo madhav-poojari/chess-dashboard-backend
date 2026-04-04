@@ -67,7 +67,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "failed to fetch coach", nil, nil)
 		return
 	}
-	
+
 	resp := models.UserResponse{
 		User:   u,
 		Coach:  coachInfo,
@@ -291,6 +291,50 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", users, nil)
+}
+
+// GET /users/students - returns id, full name, and email of all active students
+func (h *UserHandler) GetStudents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	current := auth.GetUserFromCtx(ctx)
+	if current == nil {
+		utils.WriteJSONResponse(w, http.StatusUnauthorized, false, "unauthorized", nil, nil)
+		return
+	}
+	q := r.URL.Query()
+	showInactive := q.Get("show-inactive")
+	activeOnly := true
+	if showInactive == "true" {
+		activeOnly = false
+	}
+
+	if current.Role != models.RoleAdmin && current.Role != models.RoleCoach && current.Role != models.RoleMentor {
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
+		return
+	}
+
+	users, err := h.store.ListActiveStudents(ctx, activeOnly)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching students", nil, err.Error())
+		return
+	}
+
+	type studentSummary struct {
+		ID        string `json:"id"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
+	result := make([]studentSummary, len(users))
+	for i, u := range users {
+		result[i] = studentSummary{
+			ID:        u.ID,
+			FirstName: u.FirstName,
+			LastName:  u.LastName,
+		}
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", result, nil)
 }
 
 // POST /users/reset-password - allows users to reset their own password

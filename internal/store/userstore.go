@@ -64,6 +64,21 @@ func (s *Store) ListUsersAdmin(ctx context.Context) ([]*models.User, error) {
 	return res, nil
 }
 
+func (s *Store) ListActiveStudents(ctx context.Context, activeOnly bool) ([]*models.User, error) {
+	var res []*models.User
+	query := s.DB.WithContext(ctx).
+		Where("role = ? ", models.RoleStudent).
+		Order("created_at desc")
+	if activeOnly {
+		query.Where("active = ?", true)
+	}
+	if err := query.
+		Find(&res).Error; err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func (s *Store) ListStudentsForCoachOrMentor(ctx context.Context, userID string) ([]*models.User, error) {
 	var students []models.User
 	err := s.DB.WithContext(ctx).
@@ -83,6 +98,29 @@ func (s *Store) ListStudentsForCoachOrMentor(ctx context.Context, userID string)
 	return out, nil
 }
 
+func (s *Store) IsRelatedStudent(ctx context.Context, requesterID string, studentID string) (bool, error) {
+	// admin quick-check
+	u, err := s.GetUserByID(ctx, requesterID)
+	if err == nil && u.Role == "admin" {
+		return true, nil
+	}
+	if requesterID == studentID {
+		return true, nil
+	}
+	// TODO get coach and mentor from a single SQL call
+	c, err := s.IsCoachOf(ctx, requesterID, studentID)
+	if err != nil {
+		return false, err
+	}
+	if c {
+		return true, nil
+	}
+	m, err := s.IsMentorOf(ctx, requesterID, studentID)
+	if err != nil {
+		return false, err
+	}
+	return m, nil
+}
 func (s *Store) GetCoachesByStudentID(ctx context.Context, studentID string) (string, string, error) {
 	var r models.Relation
 	if err := s.DB.WithContext(ctx).Where("user_id = ?", studentID).First(&r).Error; err != nil {
