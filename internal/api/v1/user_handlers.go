@@ -40,7 +40,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Coaches/mentors of the *requested* user (id); used to allow coach/mentor to view their student.
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, id)
+	coachId, mentorId, _ := h.store.GetGuideByUserID(ctx, id)
 
 	if !CanAccessStudentData(ctx, h.store.Store, current, id) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
@@ -96,7 +96,7 @@ func (h *UserHandler) GetSelfProfile(w http.ResponseWriter, r *http.Request) {
 	var mentorInfo *models.PersonInfo
 
 	// fetch assigned coach & mentor
-	coachId, mentorId, _ := h.store.GetCoachesByStudentID(ctx, current.ID)
+	coachId, mentorId, _ := h.store.GetGuideByUserID(ctx, current.ID)
 
 	mentorInfo, err = h.getPersonInfoByID(ctx, mentorId)
 	if err != nil {
@@ -285,12 +285,20 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// coach or mentor (or both) -> single DB query with OR
-	users, err := h.store.ListStudentsForCoachOrMentor(ctx, current.ID)
+	students, err := h.store.ListStudentsForCoachOrMentor(ctx, current.ID)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching students", nil, err.Error())
 		return
 	}
-	utils.WriteJSONResponse(w, http.StatusOK, true, "success", users, nil)
+
+	// get coaches details along with students if mentor
+	coaches, err := h.store.ListCoachesForMentor(ctx, current.ID)
+	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching coaches", nil, err.Error())
+		return
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, true, "success", append(students, coaches...), nil)
 }
 
 // POST /users/reset-password - allows users to reset their own password
@@ -373,7 +381,7 @@ func CanAccessStudentData(ctx context.Context, s *store.Store, current *models.U
 	if current.ID == targetID || current.Role == "admin" {
 		return true
 	}
-	coachID, mentorID, _ := s.GetCoachesByStudentID(ctx, targetID)
+	coachID, mentorID, _ := s.GetGuideByUserID(ctx, targetID)
 	return current.ID == coachID || current.ID == mentorID
 }
 

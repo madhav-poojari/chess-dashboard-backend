@@ -277,7 +277,6 @@ func (h *NotesHandler) GetNotesByUser(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching notes", nil, err.Error())
 		return
 	}
-
 	// filter by visibility
 	filtered := []*models.Note{}
 	for _, n := range notes {

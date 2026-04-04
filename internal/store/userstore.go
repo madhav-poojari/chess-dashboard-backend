@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/madhava-poojari/dashboard-api/internal/models"
@@ -83,12 +84,42 @@ func (s *Store) ListStudentsForCoachOrMentor(ctx context.Context, userID string)
 	return out, nil
 }
 
-func (s *Store) GetCoachesByStudentID(ctx context.Context, studentID string) (string, string, error) {
+func (s *Store) ListCoachesForMentor(ctx context.Context, mentorID string) ([]*models.User, error) {
+	var coaches []models.User
+	err := s.DB.WithContext(ctx).
+		Table("users").
+		Select("users.*").
+		Joins("JOIN relations r ON r.coach_id = users.id").
+		Where("r.mentor_id = ?", mentorID).
+		Order("users.created_at DESC").
+		Find(&coaches).Error
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*models.User, len(coaches))
+	for i := range coaches {
+		out[i] = &coaches[i]
+	}
+	return out, nil
+}
+
+func (s *Store) GetGuideByUserID(ctx context.Context, studentID string) (string, string, error) {
 	var r models.Relation
-	if err := s.DB.WithContext(ctx).Where("user_id = ?", studentID).First(&r).Error; err != nil {
+
+	if err := s.DB.WithContext(ctx).Where("user_id = ?", studentID).First(&r).Error; err == nil {
+		return r.CoachID, r.MentorID, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", "", err
 	}
-	return r.CoachID, r.MentorID, nil
+
+	if err := s.DB.WithContext(ctx).Where("coach_id = ?", studentID).First(&r).Error; err == nil {
+		return "", r.MentorID, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", "", err
+	}
+
+	return "", "", gorm.ErrRecordNotFound
 }
 
 func GetMentorCoachDetails(db *gorm.DB, studentID string) (string, string, string, string, error) {
