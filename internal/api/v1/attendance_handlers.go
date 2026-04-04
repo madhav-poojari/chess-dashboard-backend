@@ -467,7 +467,7 @@ func (h *AttendanceHandler) DeleteAttendance(w http.ResponseWriter, r *http.Requ
 	utils.WriteJSONResponse(w, http.StatusOK, true, "deleted", nil, nil)
 }
 
-func (h *AttendanceHandler) canAccessAttendance(ctx context.Context, current *models.User, a *models.Attendance) bool {
+func (h *AttendanceHandler)   canAccessAttendance(ctx context.Context, current *models.User, a *models.Attendance) bool {
 	switch current.Role {
 	case models.RoleAdmin:
 		return true

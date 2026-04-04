@@ -47,29 +47,6 @@ func (s *Store) IsMentorOf(ctx context.Context, mentorID, studentID string) (boo
 		Count(&cnt).Error
 	return cnt > 0, err
 }
-func (s *Store) IsRelatedStudent(ctx context.Context, requesterID string, studentID string) (bool, error) {
-	// admin quick-check
-	u, err := s.GetUserByID(ctx, requesterID)
-	if err == nil && u.Role == "admin" {
-		return true, nil
-	}
-	if requesterID == studentID {
-		return true, nil
-	}
-	// TODO get coach and mentor from a single SQL call
-	c, err := s.IsCoachOf(ctx, requesterID, studentID)
-	if err != nil {
-		return false, err
-	}
-	if c {
-		return true, nil
-	}
-	m, err := s.IsMentorOf(ctx, requesterID, studentID)
-	if err != nil {
-		return false, err
-	}
-	return m, nil
-}
 
 // CreateNote
 func (s *Store) CreateNote(ctx context.Context, n *models.Note) error {

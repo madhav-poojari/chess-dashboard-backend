@@ -123,8 +123,13 @@ func (h *NotesHandler) CreateLessonPlan(w http.ResponseWriter, r *http.Request) 
 			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error", nil, err.Error())
 			return
 		}
-		if !isMentor {
-			utils.WriteJSONResponse(w, http.StatusForbidden, false, "only mentor or admin can create lesson plan", nil, nil)
+		isCoach, err := h.store.IsCoachOf(ctx, current.ID, req.UserID)
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error", nil, err.Error())
+			return
+		}
+		if !(isCoach || isMentor) {
+			utils.WriteJSONResponse(w, http.StatusForbidden, false, "only mentor or coach can create lesson plan", nil, nil)
 			return
 		}
 	}
@@ -192,7 +197,14 @@ func (h *NotesHandler) UpdateLessonPlan(w http.ResponseWriter, r *http.Request) 
 		isMentor, err := h.store.IsMentorOf(ctx, current.ID, lp.UserID)
 		if err == nil && isMentor {
 			allowed = true
+		} else {
+			isCoach, err := h.store.IsCoachOf(ctx, current.ID, lp.UserID)
+			if err == nil && isCoach {
+				allowed = true
+			}
+
 		}
+
 	}
 
 	if !allowed {
