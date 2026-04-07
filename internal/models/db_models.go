@@ -166,3 +166,12 @@ type TournamentWithinRadius struct {
 }
 
 func (TournamentWithinRadius) TableName() string { return "tournaments_within_radius" }
+
+type ClassSchedule struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	StudentID string `gorm:"index;size:10;not null" json:"student_id"`
+	Student   User   `gorm:"foreignKey:StudentID;references:ID" json:"student,omitempty"`
+	DayOfWeek int    `gorm:"not null" json:"day_of_week"`                                // 0=Sun..6=Sat
+	StartTime string `gorm:"type:text;not null" json:"start_time"`                       // "HH:MM" in student's timezone
+	Timezone  string `gorm:"type:text;not null" json:"timezone"`                         // IANA timezone e.g. "America/New_York"
+}
