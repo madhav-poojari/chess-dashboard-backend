@@ -38,6 +38,7 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 		&models.ZipcodeScrapeScope{},
 		&models.Tournament{},
 		&models.TournamentWithinRadius{},
+		&models.ClassSchedule{},
 	); err != nil {
 		return nil, err
 	}
