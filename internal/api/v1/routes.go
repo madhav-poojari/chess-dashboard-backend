@@ -164,4 +164,20 @@ func (a *API) routes() {
 		r.Post("/tournaments", scraperH.SubmitTournaments)
 	})
 
+	// Schedule routes (class time slots)
+	schedH := NewScheduleHandler(ss)
+	r.Route("/schedules", func(r chi.Router) {
+		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthMiddleware(ss.Store))
+			// Coach/Mentor/Admin CRUD
+			r.With(auth.RoleMiddleware("coach", "mentor", "admin")).Post("/", schedH.CreateSchedule)
+			r.With(auth.RoleMiddleware("coach", "mentor", "admin")).Get("/", schedH.ListSchedules)
+			r.With(auth.RoleMiddleware("coach", "mentor", "admin")).Patch("/{id}", schedH.UpdateSchedule)
+			r.With(auth.RoleMiddleware("coach", "mentor", "admin")).Delete("/{id}", schedH.DeleteSchedule)
+			// Any authenticated user can view a student's schedule (handler enforces access via CanAccessStudentData)
+			r.Get("/student/{studentId}", schedH.GetStudentSchedule)
+		})
+	})
+
 }
