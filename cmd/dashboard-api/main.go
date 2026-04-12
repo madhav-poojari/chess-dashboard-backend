@@ -9,6 +9,7 @@ import (
 
 	"github.com/madhava-poojari/dashboard-api/internal/config"
 	"github.com/madhava-poojari/dashboard-api/internal/server"
+	"github.com/madhava-poojari/dashboard-api/internal/service"
 	"github.com/madhava-poojari/dashboard-api/internal/store"
 )
 
@@ -29,6 +30,9 @@ func main() {
 
 	srv := appServer.NewHTTPServer()
 
+	// Start rating cron scheduler
+	service.StartRatingCrons(pool)
+
 	// graceful shutdown
 	go func() {
 		log.Printf("listening on %s", cfg.BindAddr)
@@ -47,3 +51,4 @@ func main() {
 		log.Printf("shutdown error: %v", err)
 	}
 }
+

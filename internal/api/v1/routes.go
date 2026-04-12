@@ -197,4 +197,15 @@ func (a *API) routes() {
 		})
 	})
 
+	// Rating history routes (progress charts)
+	ratingH := NewRatingHandler(ss)
+	r.Route("/ratings", func(r chi.Router) {
+		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthMiddleware(ss.Store))
+			r.Get("/{studentId}/{platform}", ratingH.GetStudentPlatformRatings)
+			r.With(auth.RoleMiddleware("admin")).Post("/trigger-scrape", ratingH.TriggerScrape)
+		})
+	})
+
 }
