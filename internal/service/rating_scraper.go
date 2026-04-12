@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -16,9 +17,22 @@ import (
 )
 
 const (
-	chesscomUserAgent = "BRSChessAcademy/1.0 (contact: admin@brschess.com)"
-	chesscomDelay     = 2 * time.Second // 2s between requests (double the minimum)
+	chesscomUserAgent = "BRSChessAcademy/1.0 (contact: brs.chessacademy@gmail.com)"
+	chesscomDelayMin  = 3 * time.Second // minimum delay between Chess.com requests
+	chesscomDelayMax  = 6 * time.Second // maximum delay (randomized to avoid rate limiting)
+	chesscomRetries   = 2               // max retries per failed archive request
 )
+
+// Shared HTTP client with timeout — prevents hung connections from blocking forever.
+var scrapeClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
+// randomDelay sleeps for a random duration between chesscomDelayMin and chesscomDelayMax.
+func randomDelay() {
+	jitter := time.Duration(rand.Int63n(int64(chesscomDelayMax - chesscomDelayMin)))
+	time.Sleep(chesscomDelayMin + jitter)
+}
 
 // ---- Chess.com Scraper ----
 
@@ -117,12 +131,28 @@ func ScrapeChesscomHistory(username string) ([]models.RatingHistory, error) {
 	}
 	weekMap := make(map[weekKey]*weekData)
 
-	for _, archiveMonthURL := range archives.Archives {
-		time.Sleep(chesscomDelay)
+	for i, archiveMonthURL := range archives.Archives {
+		// Randomized delay between requests to avoid rate limiting
+		if i > 0 {
+			randomDelay()
+		}
 
-		monthBody, err := chesscomGet(archiveMonthURL)
-		if err != nil {
-			log.Printf("chesscom games fetch error for %s: %v", archiveMonthURL, err)
+		// Retry logic for transient failures (connection resets, etc.)
+		var monthBody io.ReadCloser
+		var fetchErr error
+		for attempt := 0; attempt <= chesscomRetries; attempt++ {
+			if attempt > 0 {
+				backoff := time.Duration(attempt*5) * time.Second
+				log.Printf("chesscom retry %d/%d for %s (waiting %s)", attempt, chesscomRetries, archiveMonthURL, backoff)
+				time.Sleep(backoff)
+			}
+			monthBody, fetchErr = chesscomGet(archiveMonthURL)
+			if fetchErr == nil {
+				break
+			}
+		}
+		if fetchErr != nil {
+			log.Printf("chesscom games fetch error for %s (after %d retries): %v", archiveMonthURL, chesscomRetries, fetchErr)
 			continue // skip this month, don't fail the whole backfill
 		}
 
@@ -197,7 +227,7 @@ func chesscomGet(url string) (io.ReadCloser, error) {
 	}
 	req.Header.Set("User-Agent", chesscomUserAgent)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := scrapeClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +252,7 @@ type LichessUserResponse struct {
 // ScrapeLichessCurrent fetches the current rapid rating from the Lichess user API.
 func ScrapeLichessCurrent(username string) (*models.RatingHistory, error) {
 	url := fmt.Sprintf("https://lichess.org/api/user/%s", username)
-	resp, err := http.Get(url)
+	resp, err := scrapeClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("lichess user fetch: %w", err)
 	}
