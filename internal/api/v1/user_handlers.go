@@ -73,6 +73,15 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		Coach:  coachInfo,
 		Mentor: mentorInfo,
 	}
+
+	// Embed schedule for student profiles
+	if u.Role == models.RoleStudent {
+		schedule, err := h.store.ListSchedulesForStudents(ctx, []string{u.ID})
+		if err == nil {
+			resp.Schedule = schedule
+		}
+	}
+
 	fmt.Println("Sending response: ", resp)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
 }
@@ -114,6 +123,14 @@ func (h *UserHandler) GetSelfProfile(w http.ResponseWriter, r *http.Request) {
 		User:   u,
 		Coach:  coachInfo,
 		Mentor: mentorInfo,
+	}
+
+	// Embed schedule for student profiles
+	if u.Role == models.RoleStudent {
+		schedule, err := h.store.ListSchedulesForStudents(ctx, []string{u.ID})
+		if err == nil {
+			resp.Schedule = schedule
+		}
 	}
 
 	utils.WriteJSONResponse(w, http.StatusOK, true, "success", resp, nil)
