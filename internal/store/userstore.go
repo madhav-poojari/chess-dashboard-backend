@@ -85,7 +85,7 @@ func (s *Store) ListStudentsForCoachOrMentor(ctx context.Context, userID string)
 		Table("users").
 		Select("users.*").
 		Joins("JOIN relations r ON r.user_id = users.id").
-		Where("r.coach_id = ? OR r.mentor_id = ?", userID, userID).
+		Where("(r.coach_id = ? OR r.mentor_id = ?) AND users.active = true", userID, userID).
 		Order("users.created_at DESC").
 		Find(&students).Error
 	if err != nil {
