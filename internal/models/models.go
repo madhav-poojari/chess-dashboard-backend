@@ -17,8 +17,9 @@ type PersonInfo struct {
 
 type UserResponse struct {
 	*User
-	Mentor *PersonInfo `json:"mentor,omitempty"`
-	Coach  *PersonInfo `json:"coach,omitempty"`
+	Mentor   *PersonInfo      `json:"mentor,omitempty"`
+	Coach    *PersonInfo      `json:"coach,omitempty"`
+	Schedule []*ClassSchedule `json:"schedule,omitempty"`
 }
 
 type Role string

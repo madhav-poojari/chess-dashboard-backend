@@ -85,46 +85,16 @@ func (s *Store) DeleteScheduleByID(ctx context.Context, id uint) error {
 	return s.DB.WithContext(ctx).Where("id = ?", id).Delete(&models.ClassSchedule{}).Error
 }
 
-// ListSchedulesForCoach returns all schedule slots for students assigned to the given coach.
-func (s *Store) ListSchedulesForCoach(ctx context.Context, coachID string) ([]*models.ClassSchedule, error) {
+// ListSchedulesForStudents returns all schedule slots for the given list of student IDs.
+// Preloads the Student relation. If studentIDs is empty, returns nil.
+func (s *Store) ListSchedulesForStudents(ctx context.Context, studentIDs []string) ([]*models.ClassSchedule, error) {
+	if len(studentIDs) == 0 {
+		return nil, nil
+	}
 	var out []*models.ClassSchedule
 	err := s.DB.WithContext(ctx).
 		Preload("Student").
-		Joins("JOIN relations ON relations.user_id = class_schedules.student_id").
-		Where("relations.coach_id = ?", coachID).
-		Order("class_schedules.day_of_week, class_schedules.start_time").
-		Find(&out).Error
-	return out, err
-}
-
-// ListSchedulesForMentor returns all schedule slots for students mentored by the given mentor.
-func (s *Store) ListSchedulesForMentor(ctx context.Context, mentorID string) ([]*models.ClassSchedule, error) {
-	var out []*models.ClassSchedule
-	err := s.DB.WithContext(ctx).
-		Preload("Student").
-		Joins("JOIN relations ON relations.user_id = class_schedules.student_id").
-		Where("relations.mentor_id = ?", mentorID).
-		Order("class_schedules.day_of_week, class_schedules.start_time").
-		Find(&out).Error
-	return out, err
-}
-
-// ListAllSchedules returns all schedule slots (admin view).
-func (s *Store) ListAllSchedules(ctx context.Context) ([]*models.ClassSchedule, error) {
-	var out []*models.ClassSchedule
-	err := s.DB.WithContext(ctx).
-		Preload("Student").
-		Order("class_schedules.day_of_week, class_schedules.start_time").
-		Find(&out).Error
-	return out, err
-}
-
-// ListSchedulesByStudent returns all schedule slots for a specific student.
-func (s *Store) ListSchedulesByStudent(ctx context.Context, studentID string) ([]*models.ClassSchedule, error) {
-	var out []*models.ClassSchedule
-	err := s.DB.WithContext(ctx).
-		Preload("Student").
-		Where("student_id = ?", studentID).
+		Where("student_id IN ?", studentIDs).
 		Order("day_of_week, start_time").
 		Find(&out).Error
 	return out, err

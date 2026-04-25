@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -30,6 +31,58 @@ func NewScheduleHandler(s serviceStore) *ScheduleHandler {
 	return &ScheduleHandler{store: s.Store}
 }
 
+// ---- Validation helpers ----
+
+// validateScheduleCreate validates the required fields for creating a schedule.
+// Returns an error message string (empty if valid).
+func validateScheduleCreate(studentID string, dayOfWeek *int, startTime, timezone string) string {
+	if studentID == "" {
+		return "student_id is required"
+	}
+	if dayOfWeek == nil {
+		return "day_of_week is required"
+	}
+	if *dayOfWeek < 0 || *dayOfWeek > 6 {
+		return "day_of_week must be 0-6"
+	}
+	if startTime == "" {
+		return "start_time is required"
+	}
+	if timezone == "" {
+		return "timezone is required"
+	}
+	return ""
+}
+
+// validateScheduleUpdate validates the partial update fields for a schedule.
+// Returns the updates map and an error message string (empty if valid).
+func validateScheduleUpdate(dayOfWeek *int, startTime *string, timezone *string) (map[string]interface{}, string) {
+	updates := map[string]interface{}{}
+
+	if dayOfWeek != nil {
+		if *dayOfWeek < 0 || *dayOfWeek > 6 {
+			return nil, "day_of_week must be 0-6"
+		}
+		updates["day_of_week"] = *dayOfWeek
+	}
+	if startTime != nil {
+		updates["start_time"] = normalizeTime(*startTime)
+	}
+	if timezone != nil {
+		if *timezone == "" {
+			return nil, "timezone cannot be empty"
+		}
+		updates["timezone"] = *timezone
+	}
+
+	if len(updates) == 0 {
+		return nil, "no updates provided"
+	}
+	return updates, ""
+}
+
+// ---- Handlers ----
+
 // POST /schedules
 func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -50,29 +103,13 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Validate required fields
-	if req.StudentID == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "student_id is required", nil, nil)
-		return
-	}
-	if req.DayOfWeek == nil {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "day_of_week is required", nil, nil)
-		return
-	}
-	if *req.DayOfWeek < 0 || *req.DayOfWeek > 6 {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "day_of_week must be 0-6", nil, nil)
-		return
-	}
-	if req.StartTime == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "start_time is required", nil, nil)
-		return
-	}
-	if req.Timezone == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "timezone is required", nil, nil)
+	// Validate
+	if errMsg := validateScheduleCreate(req.StudentID, req.DayOfWeek, req.StartTime, req.Timezone); errMsg != "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, errMsg, nil, nil)
 		return
 	}
 
-	// Permission check: can the current user manage this student?
+	// Permission check
 	if !CanAccessStudentData(ctx, h.store, current, req.StudentID) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
@@ -106,25 +143,36 @@ func (h *ScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var out []*models.ClassSchedule
+	var students []*models.User
 	var err error
 
 	switch current.Role {
 	case models.RoleAdmin:
-		out, err = h.store.ListAllSchedules(ctx)
-	case models.RoleCoach:
-		out, err = h.store.ListSchedulesForCoach(ctx, current.ID)
-	case models.RoleMentor:
-		out, err = h.store.ListSchedulesForMentor(ctx, current.ID)
+		students, err = h.store.ListActiveStudents(ctx, true)
+	case models.RoleCoach, models.RoleMentor:
+		students, err = h.store.ListStudentsForCoachOrMentor(ctx, current.ID)
 	default:
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
 	}
 
 	if err != nil {
+		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching students", nil, err.Error())
+		return
+	}
+
+	// Extract student IDs
+	studentIDs := make([]string, len(students))
+	for i, s := range students {
+		studentIDs[i] = s.ID
+	}
+
+	out, err := h.store.ListSchedulesForStudents(ctx, studentIDs)
+	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching schedules", nil, err.Error())
 		return
 	}
+
 	utils.WriteJSONResponse(w, http.StatusOK, true, "ok", out, nil)
 }
 
@@ -155,7 +203,7 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Permission check via CanAccessStudentData
+	// Permission check
 	if !CanAccessStudentData(ctx, h.store, current, existing.StudentID) {
 		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
 		return
@@ -171,27 +219,10 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	updates := map[string]interface{}{}
-	if req.DayOfWeek != nil {
-		if *req.DayOfWeek < 0 || *req.DayOfWeek > 6 {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, false, "day_of_week must be 0-6", nil, nil)
-			return
-		}
-		updates["day_of_week"] = *req.DayOfWeek
-	}
-	if req.StartTime != nil {
-		updates["start_time"] = normalizeTime(*req.StartTime)
-	}
-	if req.Timezone != nil {
-		if *req.Timezone == "" {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, false, "timezone cannot be empty", nil, nil)
-			return
-		}
-		updates["timezone"] = *req.Timezone
-	}
-
-	if len(updates) == 0 {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "no updates provided", nil, nil)
+	// Validate
+	updates, errMsg := validateScheduleUpdate(req.DayOfWeek, req.StartTime, req.Timezone)
+	if errMsg != "" {
+		utils.WriteJSONResponse(w, http.StatusBadRequest, false, errMsg, nil, nil)
 		return
 	}
 
@@ -245,31 +276,5 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 	utils.WriteJSONResponse(w, http.StatusOK, true, "deleted", nil, nil)
 }
 
-// GET /schedules/student/{studentId}
-func (h *ScheduleHandler) GetStudentSchedule(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	current := auth.GetUserFromCtx(ctx)
-	if current == nil {
-		utils.WriteJSONResponse(w, http.StatusUnauthorized, false, "unauthorized", nil, nil)
-		return
-	}
-
-	studentID := chi.URLParam(r, "studentId")
-	if studentID == "" {
-		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "missing studentId", nil, nil)
-		return
-	}
-
-	// Any authenticated user can view if they have access (student viewing self, coach/mentor/admin)
-	if !CanAccessStudentData(ctx, h.store, current, studentID) {
-		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
-		return
-	}
-
-	out, err := h.store.ListSchedulesByStudent(ctx, studentID)
-	if err != nil {
-		utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error fetching schedule", nil, err.Error())
-		return
-	}
-	utils.WriteJSONResponse(w, http.StatusOK, true, "ok", out, nil)
-}
+// dummy-use fmt to satisfy import if needed elsewhere in package
+var _ = fmt.Sprint
