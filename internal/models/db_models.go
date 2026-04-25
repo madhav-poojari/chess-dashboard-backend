@@ -171,7 +171,22 @@ type ClassSchedule struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	StudentID string `gorm:"index;size:10;not null" json:"student_id"`
 	Student   User   `gorm:"foreignKey:StudentID;references:ID" json:"student,omitempty"`
-	DayOfWeek int    `gorm:"not null" json:"day_of_week"`                                // 0=Sun..6=Sat
-	StartTime string `gorm:"type:text;not null" json:"start_time"`                       // "HH:MM" in student's timezone
-	Timezone  string `gorm:"type:text;not null" json:"timezone"`                         // IANA timezone e.g. "America/New_York"
+	DayOfWeek int    `gorm:"not null" json:"day_of_week"`          // 0=Sun..6=Sat
+	StartTime string `gorm:"type:text;not null" json:"start_time"` // "HH:MM" in student's timezone
+	Timezone  string `gorm:"type:text;not null" json:"timezone"`   // IANA timezone e.g. "America/New_York"
+}
+
+type ReferralRelationship struct {
+	ID                      string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ReferrerID              string `gorm:"size:10;index"`
+	RefereeID               string `gorm:"size:10;index"`
+	RelationshipType        string `gorm:"index"`
+	RelationshipDescription *string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	CreatedBy               *string `gorm:"size:10"`
+}
+
+func (ReferralRelationship) TableName() string {
+	return "referral_relationships"
 }

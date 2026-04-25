@@ -39,6 +39,7 @@ func NewGormStore(cfg *config.Config) (*Store, error) {
 		&models.Tournament{},
 		&models.TournamentWithinRadius{},
 		&models.ClassSchedule{},
+		&models.ReferralRelationship{},
 	); err != nil {
 		return nil, err
 	}
