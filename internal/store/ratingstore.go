@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/madhava-poojari/dashboard-api/internal/models"
 	"gorm.io/gorm"
@@ -73,6 +74,8 @@ func (s *Store) GetStudentsWithPlatformUsername(ctx context.Context, platform st
 		column = "lichess_username"
 	case "fide":
 		column = "fide_id"
+	case "uscf":
+		column = "uscf_id"
 	default:
 		return nil, nil
 	}
@@ -89,4 +92,23 @@ func (s *Store) GetStudentsWithPlatformUsername(ctx context.Context, platform st
 		return nil, err
 	}
 	return results, nil
+}
+
+// GetExistingRatingDates returns a set of "YYYY-MM-DD" date strings for all
+// existing rating records for a user on a given platform.
+// Used by the USCF extension upload to skip duplicate tournament dates.
+func (s *Store) GetExistingRatingDates(ctx context.Context, userID, platform string) (map[string]bool, error) {
+	var dates []time.Time
+	err := s.DB.WithContext(ctx).
+		Model(&models.RatingHistory{}).
+		Where("user_id = ? AND platform = ?", userID, platform).
+		Pluck("recorded_at", &dates).Error
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(dates))
+	for _, d := range dates {
+		set[d.Format("2006-01-02")] = true
+	}
+	return set, nil
 }

@@ -175,12 +175,19 @@ func (a *API) routes() {
 		r.Get("/", HealthHandler(a.store))
 	})
 
+	// Rating handler (used by both /ratings and /scraper/uscf routes)
+	ratingH := NewRatingHandler(ss)
+
 	// Scraper routes (API-key protected, used by the Chrome extension)
 	r.Route("/scraper", func(r chi.Router) {
 		r.Use(scraperH.APIKeyAuth)
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		r.Get("/zipcodes", scraperH.GetZipcodes)
 		r.Post("/tournaments", scraperH.SubmitTournaments)
+
+		// USCF rating scraper (Chrome extension)
+		r.Get("/uscf/students", ratingH.GetUSCFStudents)
+		r.Post("/uscf/upload", ratingH.UploadUSCFRatings)
 	})
 
 	// Schedule routes (class time slots)
@@ -198,7 +205,6 @@ func (a *API) routes() {
 	})
 
 	// Rating history routes (progress charts)
-	ratingH := NewRatingHandler(ss)
 	r.Route("/ratings", func(r chi.Router) {
 		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {})
 		r.Group(func(r chi.Router) {
