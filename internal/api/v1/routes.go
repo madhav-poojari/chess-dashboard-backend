@@ -105,6 +105,7 @@ func (a *API) routes() {
 		authMiddleware := auth.AuthMiddleware(a.store)
 		r.With(authMiddleware).Get("/", userH.ListUsers)
 		r.With(authMiddleware).Get("/students", userH.GetStudents)
+		r.With(authMiddleware).Get("/coaches", userH.GetCoachesForAttendance)
 		r.With(authMiddleware).Get("/me", userH.GetSelfProfile)
 		r.With(authMiddleware).Post("/reset-password", userH.ResetOwnPassword)
 		r.With(authMiddleware).Get("/{id}", userH.GetUser)
