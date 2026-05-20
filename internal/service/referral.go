@@ -43,11 +43,6 @@ func (rs *ReferralService) CreateRelationship(ctx context.Context, referrerID, r
 		return nil, errors.New("cannot create self-referral")
 	}
 
-	// Validate relationship type
-	if err := rs.ValidateRelationshipType(relationshipType); err != nil {
-		return nil, err
-	}
-
 	// Create the relationship
 	rel := &models.ReferralRelationship{
 		ReferrerID:              referrerID,

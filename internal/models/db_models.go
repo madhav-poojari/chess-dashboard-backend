@@ -188,5 +188,5 @@ type ReferralRelationship struct {
 }
 
 func (ReferralRelationship) TableName() string {
-	return "referral_relationships"                        // IANA timezone e.g. "America/New_York"
+	return "referral_relationships"
 }

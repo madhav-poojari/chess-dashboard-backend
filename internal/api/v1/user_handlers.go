@@ -172,11 +172,6 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJSONResponse(w, http.StatusBadRequest, false, "bad request", nil, err.Error())
 		return
 	}
-	if payload.AddedInWhatsapp != nil {
-		fmt.Println("whatsapp in payload:", *payload.AddedInWhatsapp)
-	} else {
-		fmt.Println("whatsapp in payload: nil")
-	}
 
 	ctx := r.Context()
 	current := auth.GetUserFromCtx(ctx)
@@ -266,7 +261,6 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	print("detailUpdates length: ", len(detailUpdates))
 	if len(detailUpdates) > 0 {
 		if err := h.store.UpdateUserDetailsFields(ctx, id, detailUpdates); err != nil {
 			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "update details failed", nil, err.Error())
