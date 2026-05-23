@@ -129,6 +129,40 @@ func (s *Store) GetCoachesByStudentID(ctx context.Context, studentID string) (st
 	return r.CoachID, r.MentorID, nil
 }
 
+// ListCoachesForMentor returns all coaches assigned to a mentor (via relations), plus the mentor themselves.
+func (s *Store) ListCoachesForMentor(ctx context.Context, mentorID string) ([]*models.User, error) {
+	// Get distinct coach IDs from relations where mentor_id matches
+	var coachIDs []string
+	if err := s.DB.WithContext(ctx).
+		Table("relations").
+		Where("mentor_id = ?", mentorID).
+		Distinct("coach_id").
+		Pluck("coach_id", &coachIDs).Error; err != nil {
+		return nil, err
+	}
+
+	// Build a unique set including the mentor themselves
+	idSet := map[string]struct{}{mentorID: {}}
+	for _, id := range coachIDs {
+		if id != "" {
+			idSet[id] = struct{}{}
+		}
+	}
+	ids := make([]string, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+
+	var users []*models.User
+	if err := s.DB.WithContext(ctx).
+		Where("id IN ? AND active = true", ids).
+		Order("created_at DESC").
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func GetMentorCoachDetails(db *gorm.DB, studentID string) (string, string, string, string, error) {
 	var relation models.Relation
 

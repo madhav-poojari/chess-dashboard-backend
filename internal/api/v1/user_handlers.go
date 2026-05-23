@@ -156,6 +156,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		Zipcode           *string                 `json:"zipcode,omitempty"`
 		Phone             *string                 `json:"phone,omitempty"`
 		DOB               *string                 `json:"dob,omitempty"` // ISO date string, optional
+		Age               *int                    `json:"age,omitempty"` // age in years, alternative to DOB
 		LichessUsername   *string                 `json:"lichess_username,omitempty"`
 		USCFID            *string                 `json:"uscf_id,omitempty"`
 		ChesscomUsername  *string                 `json:"chesscom_username,omitempty"`
@@ -192,7 +193,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ensure target exists
-	_, err := h.store.GetUserByID(ctx, id)
+	existingUser, err := h.store.GetUserByID(ctx, id)
 	if err != nil {
 		utils.WriteJSONResponse(w, http.StatusNotFound, false, "user not found", nil, err.Error())
 		return
@@ -260,10 +261,26 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if payload.AddedInWhatsapp != nil {
 		detailUpdates["added_in_whatsapp"] = *payload.AddedInWhatsapp
 	}
-	if payload.DOB != nil {
+	// DOB and Age are mutually exclusive.
+	// If DOB is provided, store it and remove age from additional_info.
+	// If Age is provided (without DOB), store age in additional_info and clear DOB.
+	if payload.DOB != nil && *payload.DOB != "" {
 		if t, err := time.Parse(time.RFC3339, *payload.DOB); err == nil {
 			detailUpdates["dob"] = t
 		}
+		// Store DOB and clear age and age_recorded_at from additional_info
+		ai := copyAdditionalInfo(existingUser.UserDetails.AdditionalInfo)
+		delete(ai, "age")
+		delete(ai, "age_recorded_at")
+		detailUpdates["additional_info"] = ai
+	} else if payload.Age != nil {
+		// Store age in additional_info and clear DOB
+		ai := copyAdditionalInfo(existingUser.UserDetails.AdditionalInfo)
+		ai["age"] = *payload.Age
+		ai["age_recorded_at"] = time.Now().Format("2006-01-02")
+		detailUpdates["additional_info"] = ai
+		// Clear DOB
+		detailUpdates["dob"] = nil
 	}
 
 	print("detailUpdates length: ", len(detailUpdates))
@@ -463,4 +480,52 @@ func (h *UserHandler) getPersonInfoByID(
 		Bio:               user.UserDetails.Bio,
 		PersonalMeetLink:  user.UserDetails.PersonalMeetLink,
 	}, nil
+}
+
+// GET /users/coaches - returns coaches/mentors for the attendance coach-overview dropdown.
+// Admin: all coach + mentor users. Mentor: coaches under them + themselves.
+func (h *UserHandler) GetCoachesForAttendance(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	current := auth.GetUserFromCtx(ctx)
+	if current == nil {
+		utils.WriteJSONResponse(w, http.StatusUnauthorized, false, "unauthorized", nil, nil)
+		return
+	}
+
+	switch current.Role {
+	case models.RoleAdmin:
+		coaches, err := h.store.GetAllCoaches(ctx)
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error", nil, err.Error())
+			return
+		}
+		mentors, err := h.store.GetAllMentorCoaches(ctx)
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error", nil, err.Error())
+			return
+		}
+		all := append(coaches, mentors...)
+		utils.WriteJSONResponse(w, http.StatusOK, true, "success", all, nil)
+
+	case models.RoleMentor:
+		users, err := h.store.ListCoachesForMentor(ctx, current.ID)
+		if err != nil {
+			utils.WriteJSONResponse(w, http.StatusInternalServerError, false, "error", nil, err.Error())
+			return
+		}
+		utils.WriteJSONResponse(w, http.StatusOK, true, "success", users, nil)
+
+	default:
+		utils.WriteJSONResponse(w, http.StatusForbidden, false, "forbidden", nil, nil)
+	}
+}
+
+// copyAdditionalInfo returns a shallow copy of the additional_info map
+// so that modifications don't mutate the original GORM-loaded data.
+func copyAdditionalInfo(src map[string]interface{}) map[string]interface{} {
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
