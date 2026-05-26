@@ -16,15 +16,6 @@ func (s *Store) ChangeUserRole(ctx context.Context, userID, role string) error {
 	return s.DB.WithContext(ctx).Model(&models.User{}).Where("id = ?", userID).Update("role", role).Error
 }
 
-func (s *Store) AddCoachStudent(ctx context.Context, coachID, studentID, mentorID string) error {
-	r := models.Relation{CoachID: coachID, UserID: studentID, MentorID: mentorID}
-	return s.DB.WithContext(ctx).Create(&r).Error
-}
-
-func (s *Store) RemoveCoachStudent(ctx context.Context, coachID, studentID string) error {
-	return s.DB.WithContext(ctx).Where("user_id = ? AND coach_id = ?", studentID, coachID).Delete(&models.Relation{}).Error
-}
-
 // ListUnapprovedUsers returns users that are not approved, sorted by newest first
 func (s *Store) ListUnapprovedUsers(ctx context.Context) ([]*models.User, error) {
 	var res []*models.User

@@ -177,11 +177,15 @@ func GetMentorCoachDetails(db *gorm.DB, studentID string) (string, string, strin
 	var coachDetails models.UserDetails
 	var mentorDetails models.UserDetails
 
-	db.First(&coach, "id = ?", relation.CoachID)
-	db.First(&coachDetails, "user_id = ?", relation.CoachID)
+	if relation.CoachID != "" {
+		db.First(&coach, "id = ?", relation.CoachID)
+		db.First(&coachDetails, "user_id = ?", relation.CoachID)
+	}
 
-	db.First(&mentor, "id = ?", relation.MentorID)
-	db.First(&mentorDetails, "user_id = ?", relation.MentorID)
+	if relation.MentorID != "" {
+		db.First(&mentor, "id = ?", relation.MentorID)
+		db.First(&mentorDetails, "user_id = ?", relation.MentorID)
+	}
 
 	coachName := coach.FirstName + " " + coach.LastName
 	mentorName := mentor.FirstName + " " + mentor.LastName
