@@ -1,0 +1,80 @@
+diff --git a/internal/store/adminstore.go b/internal/store/adminstore.go
+index 1a57d25..6ef13d0 100644
+--- a/internal/store/adminstore.go
++++ b/internal/store/adminstore.go
+@@ -220,7 +220,7 @@ func (s *Store) GetUsersByRole(ctx context.Context, role models.Role) ([]*models
+ 	var users []*models.User
+ 	if err := s.DB.WithContext(ctx).
+ 		Preload("UserDetails").
+-		Where("role = ?", role).
++		Where("role = ? AND active = true", role).
+ 		Order("created_at DESC").
+ 		Find(&users).Error; err != nil {
+ 		return nil, err
+diff --git a/internal/store/notestore.go b/internal/store/notestore.go
+index e926b85..577aa5b 100644
+--- a/internal/store/notestore.go
++++ b/internal/store/notestore.go
+@@ -167,9 +167,10 @@ func (s *Store) CanAccessNoteForRequester(ctx context.Context, requester *models
+ 
+ // StudentNoteSummary is a lightweight summary for the students-page cards.
+ type StudentNoteSummary struct {
+-	LessonPlanTitle string   `json:"lesson_plan_title,omitempty"`
+-	LessonPlanDesc  []string `json:"lesson_plan_description,omitempty"`
+-	LatestNoteTitle string   `json:"latest_note_title,omitempty"`
++	LessonPlanTitle    string   `json:"lesson_plan_title,omitempty"`
++	LessonPlanDesc     []string `json:"lesson_plan_description,omitempty"`
++	LatestNoteTitle    string   `json:"latest_note_title,omitempty"`
++	LatestNoteFollowup bool     `json:"latest_note_followup"`
+ }
+ 
+ // GetBulkNotesSummary returns a map of studentID -> summary containing
+@@ -204,12 +205,14 @@ func (s *Store) GetBulkNotesSummary(ctx context.Context, studentIDs []string, mi
+ 
+ 	// 2. Latest visible note per student (one query using Postgres DISTINCT ON)
+ 	type latestNote struct {
+-		UserID string `gorm:"column:user_id"`
+-		Title  string `gorm:"column:title"`
++		UserID   string `gorm:"column:user_id"`
++		Title    string `gorm:"column:title"`
++		Followup bool   `gorm:"column:followup"`
+ 	}
+ 	var notes []latestNote
+ 	if err := s.DB.WithContext(ctx).
+-		Raw(`SELECT DISTINCT ON (user_id) user_id, title
++		Raw(`SELECT DISTINCT ON (user_id) user_id, title,
++				(COALESCE(additional_info->>'followup', 'false') = 'true') AS followup
+ 			 FROM notes
+ 			 WHERE user_id IN ?
+ 			   AND deleted_at IS NULL
+@@ -224,6 +227,7 @@ func (s *Store) GetBulkNotesSummary(ctx context.Context, studentIDs []string, mi
+ 			result[n.UserID] = &StudentNoteSummary{}
+ 		}
+ 		result[n.UserID].LatestNoteTitle = n.Title
++		result[n.UserID].LatestNoteFollowup = n.Followup
+ 	}
+ 
+ 	return result, nil
+diff --git a/internal/store/userstore.go b/internal/store/userstore.go
+index 4bbd9fc..8b7140a 100644
+--- a/internal/store/userstore.go
++++ b/internal/store/userstore.go
+@@ -58,7 +58,7 @@ func (s *Store) UpdateUserDetailsFields(ctx context.Context, id string, fields m
+ 
+ func (s *Store) ListUsersAdmin(ctx context.Context) ([]*models.User, error) {
+ 	var res []*models.User
+-	if err := s.DB.WithContext(ctx).Order("created_at desc").Find(&res).Error; err != nil {
++	if err := s.DB.WithContext(ctx).Where("active = true").Order("created_at desc").Find(&res).Error; err != nil {
+ 		return nil, err
+ 	}
+ 	return res, nil
+@@ -117,7 +117,7 @@ func (s *Store) ListStudentsWithRelations(ctx context.Context, userID string) ([
+ 
+ 	// Fetch relations for these students
+ 	var relations []models.Relation
+-	if err := s.DB.WithContext(ctx).Where("user_id IN ?", ids).Find(&relations).Error; err != nil {
++	if err := s.DB.WithContext(ctx).Where("user_id IN ? AND active = true", ids).Find(&relations).Error; err != nil {
+ 		return nil, err
+ 	}
+ 	relMap := make(map[string]models.Relation)
+

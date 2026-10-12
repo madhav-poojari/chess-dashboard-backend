@@ -220,7 +220,7 @@ func (s *Store) GetUsersByRole(ctx context.Context, role models.Role) ([]*models
 	var users []*models.User
 	if err := s.DB.WithContext(ctx).
 		Preload("UserDetails").
-		Where("role = ?", role).
+		Where("role = ? AND active = true", role).
 		Order("created_at DESC").
 		Find(&users).Error; err != nil {
 		return nil, err

@@ -167,9 +167,10 @@ func (s *Store) CanAccessNoteForRequester(ctx context.Context, requester *models
 
 // StudentNoteSummary is a lightweight summary for the students-page cards.
 type StudentNoteSummary struct {
-	LessonPlanTitle string   `json:"lesson_plan_title,omitempty"`
-	LessonPlanDesc  []string `json:"lesson_plan_description,omitempty"`
-	LatestNoteTitle string   `json:"latest_note_title,omitempty"`
+	LessonPlanTitle    string   `json:"lesson_plan_title,omitempty"`
+	LessonPlanDesc     []string `json:"lesson_plan_description,omitempty"`
+	LatestNoteTitle    string   `json:"latest_note_title,omitempty"`
+	LatestNoteFollowup bool     `json:"latest_note_followup"`
 }
 
 // GetBulkNotesSummary returns a map of studentID -> summary containing
@@ -204,12 +205,14 @@ func (s *Store) GetBulkNotesSummary(ctx context.Context, studentIDs []string, mi
 
 	// 2. Latest visible note per student (one query using Postgres DISTINCT ON)
 	type latestNote struct {
-		UserID string `gorm:"column:user_id"`
-		Title  string `gorm:"column:title"`
+		UserID   string `gorm:"column:user_id"`
+		Title    string `gorm:"column:title"`
+		Followup bool   `gorm:"column:followup"`
 	}
 	var notes []latestNote
 	if err := s.DB.WithContext(ctx).
-		Raw(`SELECT DISTINCT ON (user_id) user_id, title
+		Raw(`SELECT DISTINCT ON (user_id) user_id, title,
+				(COALESCE(additional_info->>'followup', 'false') = 'true') AS followup
 			 FROM notes
 			 WHERE user_id IN ?
 			   AND deleted_at IS NULL
@@ -224,6 +227,7 @@ func (s *Store) GetBulkNotesSummary(ctx context.Context, studentIDs []string, mi
 			result[n.UserID] = &StudentNoteSummary{}
 		}
 		result[n.UserID].LatestNoteTitle = n.Title
+		result[n.UserID].LatestNoteFollowup = n.Followup
 	}
 
 	return result, nil
