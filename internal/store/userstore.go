@@ -58,7 +58,7 @@ func (s *Store) UpdateUserDetailsFields(ctx context.Context, id string, fields m
 
 func (s *Store) ListUsersAdmin(ctx context.Context) ([]*models.User, error) {
 	var res []*models.User
-	if err := s.DB.WithContext(ctx).Order("created_at desc").Find(&res).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Where("active = true").Order("created_at desc").Find(&res).Error; err != nil {
 		return nil, err
 	}
 	return res, nil
@@ -117,7 +117,7 @@ func (s *Store) ListStudentsWithRelations(ctx context.Context, userID string) ([
 
 	// Fetch relations for these students
 	var relations []models.Relation
-	if err := s.DB.WithContext(ctx).Where("user_id IN ?", ids).Find(&relations).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Where("user_id IN ? AND active = true", ids).Find(&relations).Error; err != nil {
 		return nil, err
 	}
 	relMap := make(map[string]models.Relation)
